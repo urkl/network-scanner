@@ -9,6 +9,15 @@
 </p>
 
 <p align="center">
+  <a href="https://hub.docker.com/r/urosknet/network-scanner">
+    <img src="https://img.shields.io/docker/pulls/urosknet/network-scanner?style=for-the-badge&logo=docker&label=Docker%20Pulls" alt="Docker Pulls">
+  </a>
+  <a href="https://hub.docker.com/r/urosknet/network-scanner">
+    <img src="https://img.shields.io/docker/image-size/urosknet/network-scanner/latest?style=for-the-badge&logo=docker&label=Image%20Size" alt="Docker Image Size">
+  </a>
+</p>
+
+<p align="center">
   <strong>Advanced real-time network scanner with intelligent device recognition and beautiful web interface</strong>
 </p>
 
@@ -104,6 +113,8 @@
 
 #### Option 1: Pre-built Docker Hub Image (Fastest!)
 
+**🐳 Available on Docker Hub:** [urosknet/network-scanner](https://hub.docker.com/r/urosknet/network-scanner)
+
 ```bash
 # Pull and run directly from Docker Hub
 docker run -d \
@@ -111,7 +122,7 @@ docker run -d \
   --network host \
   --privileged \
   -e AI_ENABLED=false \
-  urkl/network-scanner:latest
+  urosknet/network-scanner:latest
 
 # Open in browser
 open http://localhost:5000
@@ -125,7 +136,7 @@ Create `docker-compose.yml`:
 version: '3.8'
 services:
   network-scanner:
-    image: urkl/network-scanner:latest
+    image: urosknet/network-scanner:latest
     container_name: network_scanner
     restart: unless-stopped
     network_mode: host
@@ -455,6 +466,7 @@ copies or substantial portions of the Software.
 
 ## 🤝 Support & Community
 
+- **🐳 Docker Hub**: [urosknet/network-scanner](https://hub.docker.com/r/urosknet/network-scanner)
 - **🐛 Bug Reports**: [GitHub Issues](https://github.com/urkl/network-scanner/issues)
 - **💡 Feature Requests**: [GitHub Discussions](https://github.com/urkl/network-scanner/discussions)
 - **📧 Email**: uros.kristan@gmail.com
