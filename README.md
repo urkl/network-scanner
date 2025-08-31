@@ -27,6 +27,20 @@
 
 ---
 
+## 💡 Why This Network Scanner?
+
+I created this application because existing network device scanners were frustrating me with their limitations:
+- **Poor visibility** - Most tools show minimal device information
+- **Confusing interfaces** - Cluttered, hard to navigate UIs
+- **Incomplete data** - Missing device names, types, or services
+- **Mobile-only apps** - No proper desktop/web interface
+- **No real-time updates** - Static scans that become outdated quickly
+- **Limited device recognition** - Generic "unknown device" everywhere
+
+**I wanted a clean, comprehensive network overview that actually works.** This scanner provides real-time visibility into every device on your network with intelligent categorization, beautiful presentation, and all the details you need in one place.
+
+---
+
 ## 📸 Screenshots
 
 ### Main Dashboard
