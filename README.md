@@ -53,8 +53,10 @@
 ### 🧠 **Intelligent Device Recognition**
 - **Automatic device categorization** (router, phone, printer, server, IoT...)
 - **Smart icon detection** based on vendor, hostname, OS, and ports
+- **AI-powered device naming** with OpenAI integration (optional)
 - **Dynamic device descriptions** with vendor information and service count
 - **Color-coded visualization** for quick visual recognition
+- **Enhanced Discovery** with mDNS/Bonjour and UPnP/SSDP protocols
 
 ### 🔍 **Advanced Network Analysis**
 - **MAC address collection** from nmap results + system ARP table
@@ -98,44 +100,117 @@
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### 🐳 Docker Installation (RECOMMENDED)
+
+#### Option 1: Pre-built Docker Hub Image (Fastest!)
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/network-scanner.git
-cd network-scanner
-
-# Run with Docker Compose
-docker-compose up --build
+# Pull and run directly from Docker Hub
+docker run -d \
+  --name network-scanner \
+  --network host \
+  --privileged \
+  -e AI_ENABLED=false \
+  urkl/network-scanner:latest
 
 # Open in browser
 open http://localhost:5000
 ```
 
-### Option 2: Local Installation
+#### Option 2: Docker Compose (Best for production)
+
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  network-scanner:
+    image: urkl/network-scanner:latest
+    container_name: network_scanner
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      - AI_ENABLED=false
+      # Add your OpenAI key if you want AI features
+      # - AI_API_KEY=
+```
+
+Then run:
+```bash
+docker-compose up -d
+open http://localhost:5000
+```
+
+#### Option 3: Build from source
 
 ```bash
-# Install system dependencies
-sudo apt-get install nmap net-tools iputils-ping
+# Clone and build locally
+git clone https://github.com/urkl/network-scanner.git
+cd network-scanner
+docker-compose up --build -d
+open http://localhost:5000
+```
+
+### ⚠️ Manual Installation (NOT recommended)
+
+<details>
+<summary>Click to see manual installation (complex, requires root)</summary>
+
+```bash
+# Install system dependencies (requires root)
+sudo apt-get update
+sudo apt-get install -y nmap net-tools iputils-ping gcc python3-dev
 
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Run the application
-python app.py
+# Run the application (requires sudo)
+sudo python app.py
 
 # Open in browser
 open http://localhost:5000
 ```
+
+**Note:** Manual installation is complex and requires:
+- Root/sudo privileges for network scanning
+- System dependencies (nmap, gcc, python-dev)
+- Proper Python environment setup
+- Manual configuration of all settings
+
+**We strongly recommend using Docker instead!**
+</details>
 
 ---
 
 ## 🔧 Configuration
 
 ### Environment Variables
+
+Create a `.env` file based on `.env.example`:
+
+```bash
+# Copy example configuration
+cp .env.example .env
+```
+
+Key environment variables:
+
+#### Flask Configuration
 - `FLASK_ENV`: Set to `development` for debug mode
-- `NETWORK_INTERFACE`: Specify preferred network interface
+- `FLASK_DEBUG`: Enable/disable debug mode (default: false)
+- `SECRET_KEY`: Flask session secret (generate secure random key!)
+
+#### AI Configuration (Optional)
+- `AI_ENABLED`: Enable AI device analysis (default: false)
+- `AI_API_KEY`: Your OpenAI API key (required if AI enabled)
+- `AI_PROVIDER`: AI provider (currently only 'openai')
+
+#### Network Configuration  
+- `DEFAULT_NETWORK`: Default network range (default: 192.168.1.0/24)
+- `PREFERRED_INTERFACE`: Specify preferred network interface
 - `SCAN_TIMEOUT`: Adjust scanning timeout (default: 300s)
+- `TOP_PORTS`: Number of top ports to scan (default: 200)
 
 ### Config File (`config.json`)
 ```json
@@ -226,6 +301,20 @@ services:
 
 ## 🔒 Security Considerations
 
+### ⚠️ **IMPORTANT SECURITY WARNINGS**
+
+#### Before Deployment:
+1. **Generate secure SECRET_KEY**: Never use default `'changeme_in_production'`
+2. **Protect API keys**: Store OpenAI API key in environment variables only
+3. **Validate inputs**: All IP addresses are validated to prevent injection attacks
+4. **Network access**: Only scan networks you own or have explicit permission
+
+#### Security Features:
+- ✅ **Input validation** on all network operations  
+- ✅ **Security headers** (XSS protection, CSRF, content type sniffing)
+- ✅ **No hardcoded secrets** in source code
+- ✅ **SQLite with parameterized queries** (no SQL injection)
+
 ### Permissions Required
 - **Root privileges** recommended for full functionality (OS detection, MAC addresses)
 - **Network access** to scan local network segments
@@ -236,6 +325,8 @@ services:
 - Use in trusted network environments
 - Consider firewall rules for production deployment
 - Regular security updates for dependencies
+- Never commit API keys to version control
+- Use strong, random SECRET_KEY in production
 
 ---
 
@@ -347,7 +438,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ```
 MIT License
 
-Copyright (c) 2024 Uroš Kostanjevec (Urosk.NET)
+Copyright (c) 2024 Uroš Kristan (Urosk.NET)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -364,9 +455,9 @@ copies or substantial portions of the Software.
 
 ## 🤝 Support & Community
 
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-username/network-scanner/issues)
-- **💡 Feature Requests**: [GitHub Discussions](https://github.com/your-username/network-scanner/discussions)
-- **📧 Email**: [Your contact email]
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/urkl/network-scanner/issues)
+- **💡 Feature Requests**: [GitHub Discussions](https://github.com/urkl/network-scanner/discussions)
+- **📧 Email**: uros.kristan@gmail.com
 - **🌐 Website**: [Urosk.NET](https://www.urosk.net)
 
 ---
@@ -383,7 +474,7 @@ copies or substantial portions of the Software.
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-username/network-scanner&type=Date)](https://star-history.com/urkl/network-scanner&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=urkl/network-scanner&type=Date)](https://star-history.com/urkl/network-scanner&Date)
 
 ---
 
