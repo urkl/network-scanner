@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Scanner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #3b82f6 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .main-container {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15), 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin: 20px auto;
+            padding: 35px;
+            backdrop-filter: blur(10px);
+        }
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #3b82f6 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 25px rgba(30, 60, 114, 0.3);
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.1);
+            margin-bottom: 15px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(30, 60, 114, 0.15);
+        }
+        .device-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3b82f6;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .device-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(30, 60, 114, 0.15);
+        }
+        .device-card.offline {
+            border-left-color: #ef4444;
+            opacity: 0.7;
+        }
+        .port-badge {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin: 2px;
+            display: inline-block;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .port-badge:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        .port-link {
+            text-decoration: none;
+            background: linear-gradient(135deg, #10b981, #059669) !important;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .port-link:hover {
+            background: linear-gradient(135deg, #059669, #047857) !important;
+            color: white;
+            text-decoration: none;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+        .urosk-link {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .urosk-link:hover {
+            color: #60a5fa !important;
+            text-shadow: 0 0 15px rgba(96, 165, 250, 0.6);
+            transform: scale(1.05);
+        }
+        .urosk-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -2px;
+            left: 50%;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            transition: all 0.3s ease;
+            transform: translateX(-50%);
+        }
+        .urosk-link:hover::after {
+            width: 100%;
+        }
+        .table thead th {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #3b82f6 100%);
+            color: white;
+            border: none;
+            padding: 15px 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+        .table {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        .table td i {
+            margin-right: 8px;
+            width: 16px;
+            text-align: center;
+        }
+        .table tbody td {
+            padding: 12px;
+            vertical-align: middle;
+        }
+        .scanning-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+        }
+        .scanning-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .device-icon {
+            font-size: 2em;
+            margin-right: 15px;
+        }
+        .search-box {
+            margin-bottom: 20px;
+        }
+        .table-responsive {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        .badge-online {
+            background-color: #28a745;
+        }
+        .online-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #28a745;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .offline-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .custom-name-input {
+            border: none;
+            background: transparent;
+            font-weight: bold;
+            color: #007bff;
+            width: 100%;
+        }
+        .custom-name-input:focus {
+            outline: 1px solid #007bff;
+            background: white;
+        }
+        
+        .ai-suggestion-box {
+            max-width: 200px;
+            font-size: 0.8em;
+        }
+        
+        .ai-name-suggestion {
+            font-size: 0.85em;
+        }
+        
+        .ai-name-suggestion .btn-xs {
+            font-size: 0.65rem;
+            padding: 0.1rem 0.25rem;
+        }
+        
+        .btn-xs {
+            padding: 0.15rem 0.3rem;
+            font-size: 0.7rem;
+            line-height: 1.2;
+            border-radius: 0.2rem;
+        }
+        .interface-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .progress {
+            background-color: #e9ecef;
+            border-radius: 0.375rem;
+            height: 1rem;
+        }
+        .progress-bar {
+            background-color: #007bff;
+            color: white;
+            font-size: 0.75rem;
+            line-height: 1rem;
+            text-align: center;
+        }
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        @keyframes progress-bar-stripes {
+            0% { background-position: 1rem 0; }
+            100% { background-position: 0 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="main-container">
+            <!-- Header -->
+            <div class="header text-center">
+                <h1><i class="fas fa-network-wired"></i> Network Scanner</h1>
+                <p class="mb-0">Pregled vseh naprav v lokalnem omrežju</p>
+                <div class="mt-3">
+                    <small class="text-light">
+                        <i class="fas fa-code"></i> By 
+                        <a href="https://www.urosk.net" target="_blank" class="text-white text-decoration-none fw-bold urosk-link">
+                            Urosk.NET
+                        </a>
+                        <span class="text-warning"><i class="fas fa-zen-circle"></i> ZEN Vibe Coding</span>
+                    </small>
+                </div>
+            </div>
+
+            <!-- Interface Selector -->
+            <div class="interface-selector">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label for="interface-select" class="form-label">
+                            <i class="fas fa-ethernet"></i> Mrežni vmesnik:
+                        </label>
+                        <select class="form-select" id="interface-select" onchange="updateNetworkFromInterface()">
+                            <option value="">Avtomatska detekcija</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="network-input" class="form-label">
+                            <i class="fas fa-network-wired"></i> Omrežni rang:
+                        </label>
+                        <input type="text" id="network-input" class="form-control" placeholder="192.168.1.0/24">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-primary me-2" onclick="startScan(false)" 
+                                title="Hitro skeniranje - posodobi status in poišči nove naprave">
+                            <i class="fas fa-search"></i> Hitro
+                        </button>
+                        <button class="btn btn-warning" onclick="startScan(true)"
+                                title="Polno skeniranje - skeniraj vse naprave znova">
+                            <i class="fas fa-search-plus"></i> Polno
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="input-group search-box">
+                        <input type="text" id="search-input" class="form-control" placeholder="Poišči napravo..." onkeyup="filterDevices()">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div id="scan-progress-mini" class="d-none">
+                        <small class="text-muted">Skeniranje v teku:</small>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 id="scan-progress-mini-bar" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted" id="scan-progress-mini-text">0%</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="row mb-4">
+                <div class="col-md-2">
+                    <div class="stats-card">
+                        <h4><i class="fas fa-wifi text-primary"></i></h4>
+                        <h5 id="total-devices">0</h5>
+                        <small>Skupno naprav</small>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="stats-card">
+                        <h4><i class="fas fa-signal text-success"></i></h4>
+                        <h5 id="online-devices">0</h5>
+                        <small>Aktivne naprave</small>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="stats-card">
+                        <h4><i class="fas fa-clock text-info"></i></h4>
+                        <h5 id="last-scan">Nikoli</h5>
+                        <small>Zadnje skeniranje</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h4><i class="fas fa-globe text-warning"></i></h4>
+                        <h5 id="network-range">-</h5>
+                        <small>Omrežje</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h4><i class="fas fa-database text-secondary"></i></h4>
+                        <h5 id="cache-info">-</h5>
+                        <small>Cache starost</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <input type="text" id="network-input" class="form-control" placeholder="Omrežni rang (npr. 192.168.1.0/24)">
+                        <button class="btn btn-primary" onclick="startScan(false)" 
+                                title="Hitro skeniranje - posodobi status in poišči nove naprave">
+                            <i class="fas fa-search"></i> Hitro skeniranje
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-warning" onclick="startScan(true)"
+                            title="Polno skeniranje - skeniraj vse naprave znova">
+                        <i class="fas fa-search-plus"></i> Polno skeniranje
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <div class="input-group search-box">
+                        <input type="text" id="search-input" class="form-control" placeholder="Poišči napravo..." onkeyup="filterDevices()">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toggle View -->
+            <div class="mb-3">
+                <button class="btn btn-outline-primary" onclick="toggleView('table')" id="table-view-btn">
+                    <i class="fas fa-table"></i> Tabela
+                </button>
+                <button class="btn btn-outline-primary" onclick="toggleView('cards')" id="cards-view-btn">
+                    <i class="fas fa-th-large"></i> Kartice
+                </button>
+                <button class="btn btn-outline-success" onclick="autoRefresh()" id="auto-refresh-btn">
+                    <i class="fas fa-sync-alt"></i> Samo-osveži: OFF
+                </button>
+            </div>
+
+            <!-- Devices Table View -->
+            <div id="table-view">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>IP Naslov</th>
+                                <th>Ime naprave</th>
+                                <th>Moje ime</th>
+                                <th>MAC naslov</th>
+                                <th>Proizvajalec</th>
+                                <th>OS</th>
+                                <th>Odprte vrata</th>
+                                <th>Zadnje aktivno</th>
+                                <th>Akcije</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devices-table">
+                            <tr>
+                                <td colspan="9" class="text-center text-muted">
+                                    <i class="fas fa-search fa-2x mb-2"></i><br>
+                                    Ni podatkov. Kliknite "Hitro" za začetek.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Devices Cards View -->
+            <div id="cards-view" style="display: none;">
+                <div id="devices-cards" class="row">
+                    <div class="col-12 text-center text-muted">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <h5>Ni podatkov</h5>
+                        <p>Kliknite "Skeniraj" za začetek skeniranja omrežja.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanning Overlay -->
+    <div class="scanning-overlay" id="scanning-overlay">
+        <div class="scanning-content">
+            <div class="spinner"></div>
+            <h4 id="scan-status-title">Skeniram omrežje...</h4>
+            <div class="progress mb-3" style="width: 300px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                     id="scan-progress-bar" role="progressbar" style="width: 0%">
+                </div>
+            </div>
+            <p id="scan-status-details">To lahko traja nekaj minut, odvisno od velikosti omrežja.</p>
+            <div class="mt-3">
+                <small class="text-muted">
+                    <span id="scan-elapsed-time">00:00:00</span> | 
+                    <span id="scan-hosts-count">0/0 naprav</span>
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let autoRefreshInterval;
+        let autoRefreshEnabled = false;
+        let currentView = 'table';
+        let availableInterfaces = [];
+
+        // Load network range on startup
+        window.onload = function() {
+            loadInterfaces();
+            loadConfig();
+            loadResults();
+        };
+
+        function loadInterfaces() {
+            fetch('/api/interfaces')
+                .then(response => response.json())
+                .then(data => {
+                    availableInterfaces = data.interfaces;
+                    const select = document.getElementById('interface-select');
+                    
+                    // Počisti obstoječe možnosti razen default
+                    while(select.children.length > 1) {
+                        select.removeChild(select.lastChild);
+                    }
+                    
+                    // Dodaj vmesnike
+                    data.interfaces.forEach(iface => {
+                        const option = document.createElement('option');
+                        option.value = iface.name;
+                        option.textContent = iface.description;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading interfaces:', error));
+        }
+
+        function loadConfig() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    if (config.preferred_interface) {
+                        document.getElementById('interface-select').value = config.preferred_interface;
+                    }
+                    if (config.last_network) {
+                        document.getElementById('network-input').value = config.last_network;
+                        document.getElementById('network-range').textContent = config.last_network;
+                    }
+                    // Naloži auto refresh nastavitev
+                    if (config.auto_refresh_enabled) {
+                        autoRefreshEnabled = false; // Reset before calling autoRefresh
+                        autoRefresh(); // This will enable auto refresh
+                    }
+                    // Naloži view mode nastavitev
+                    if (config.view_mode) {
+                        currentView = config.view_mode;
+                        toggleView(config.view_mode, false); // false = don't save to config again
+                    }
+                    // Naloži zadnji iskalni niz
+                    if (config.last_search) {
+                        document.getElementById('search-input').value = config.last_search;
+                        // Takoj filtriraj rezultate če je bil iskalni niz nastavljen
+                        filterDevices();
+                    }
+                })
+                .catch(error => console.error('Error loading config:', error));
+        }
+
+        function updateNetworkFromInterface() {
+            const selectedInterface = document.getElementById('interface-select').value;
+            if (selectedInterface) {
+                const iface = availableInterfaces.find(i => i.name === selectedInterface);
+                if (iface) {
+                    document.getElementById('network-input').value = iface.network;
+                    document.getElementById('network-range').textContent = iface.network;
+                }
+            }
+        }
+
+        function startScan(fullScan = false) {
+            const network = document.getElementById('network-input').value || '192.168.1.0/24';
+            const selectedInterface = document.getElementById('interface-select').value;
+            document.getElementById('scanning-overlay').style.display = 'block';
+            
+            let url = `/api/scan?network=${encodeURIComponent(network)}`;
+            if (fullScan) url += '&full=true';
+            if (selectedInterface) url += `&interface=${encodeURIComponent(selectedInterface)}`;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Poll for results
+                        pollResults();
+                    } else {
+                        alert('Napaka: ' + data.message);
+                        document.getElementById('scanning-overlay').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('scanning-overlay').style.display = 'none';
+                });
+        }
+
+        function pollResults() {
+            const poll = setInterval(() => {
+                // Poll za scan status
+                fetch('/api/scan-status')
+                    .then(response => response.json())
+                    .then(statusData => {
+                        updateScanProgress(statusData);
+                        
+                        if (!statusData.scanning) {
+                            clearInterval(poll);
+                            document.getElementById('scanning-overlay').style.display = 'none';
+                        }
+                    })
+                    .catch(error => console.error('Error fetching scan status:', error));
+                
+                // Poll za results
+                fetch('/api/results')
+                    .then(response => response.json())
+                    .then(data => {
+                        updateResults(data);
+                        
+                        if (!data.scanning) {
+                            clearInterval(poll);
+                            document.getElementById('scanning-overlay').style.display = 'none';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        clearInterval(poll);
+                        document.getElementById('scanning-overlay').style.display = 'none';
+                    });
+            }, 1000); // Check every second for more responsive updates
+        }
+
+        function updateScanProgress(statusData) {
+            const isScanning = statusData.scanning;
+            
+            // Show/hide mini progress bar
+            const miniProgress = document.getElementById('scan-progress-mini');
+            if (isScanning) {
+                miniProgress.classList.remove('d-none');
+                
+                // Update mini progress bar
+                const miniBar = document.getElementById('scan-progress-mini-bar');
+                const miniText = document.getElementById('scan-progress-mini-text');
+                miniBar.style.width = statusData.progress + '%';
+                miniText.textContent = `${statusData.progress}% - ${statusData.current_host || 'Priprava...'}`;
+            } else {
+                miniProgress.classList.add('d-none');
+            }
+            
+            if (!isScanning) return;
+            
+            // Update main overlay progress bar
+            const progressBar = document.getElementById('scan-progress-bar');
+            if (progressBar) {
+                progressBar.style.width = statusData.progress + '%';
+                progressBar.textContent = statusData.progress + '%';
+            }
+            
+            // Update status title
+            const titleElement = document.getElementById('scan-status-title');
+            if (titleElement) {
+                titleElement.textContent = statusData.scan_type || 'Skeniram omrežje...';
+            }
+            
+            // Update details
+            const detailsElement = document.getElementById('scan-status-details');
+            if (detailsElement) {
+                detailsElement.textContent = statusData.current_host || 'Pripravljam skeniranje...';
+            }
+            
+            // Update elapsed time
+            const timeElement = document.getElementById('scan-elapsed-time');
+            if (timeElement) {
+                timeElement.textContent = statusData.elapsed_time || '00:00:00';
+            }
+            
+            // Update hosts count
+            const hostsElement = document.getElementById('scan-hosts-count');
+            if (hostsElement) {
+                const completed = statusData.completed_hosts || 0;
+                const total = statusData.total_hosts || 0;
+                if (total > 0) {
+                    hostsElement.textContent = `${completed}/${total} naprav`;
+                } else {
+                    hostsElement.textContent = 'Priprava...';
+                }
+            }
+        }
+
+        function loadResults() {
+            fetch('/api/results')
+                .then(response => response.json())
+                .then(data => updateResults(data))
+                .catch(error => console.error('Error loading results:', error));
+        }
+
+        function updateResults(data) {
+            // Update statistics
+            document.getElementById('total-devices').textContent = data.total_devices;
+            document.getElementById('online-devices').textContent = data.online_devices || data.results.filter(d => d.state === 'up').length;
+            document.getElementById('last-scan').textContent = formatDateTime(data.last_scan) || 'Nikoli';
+            
+            // Update cache info
+            if (data.cache_info) {
+                const cacheAge = data.cache_info.cache_age_hours;
+                document.getElementById('cache-info').textContent = 
+                    cacheAge > 0 ? `${cacheAge}h` : 'Ni cache';
+            }
+
+            if (currentView === 'table') {
+                updateTableView(data.results);
+            } else {
+                updateCardsView(data.results);
+            }
+        }
+
+        function updateDeviceName(ip, newName) {
+            fetch('/api/update-device-name', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ip: ip,
+                    custom_name: newName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    alert('Napaka pri shranjevanju imena: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating device name:', error);
+                alert('Napaka pri shranjevanju imena');
+            });
+        }
+
+        function rescanDevice(ip) {
+            console.log('Starting rescan for IP:', ip);
+            fetch('/api/rescan-device', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ip: ip
+                })
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.status === 'success') {
+                    // Takoj posodobi UI da prikaže scanning indicator
+                    loadResults();
+                } else {
+                    alert('Napaka pri ponovnem skeniranju: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error rescanning device:', error);
+                alert('Napaka pri ponovnem skeniranju: ' + error.message);
+            });
+        }
+
+        function acceptAiNameSuggestion(ip) {
+            console.log('Accept clicked for IP:', ip);
+            
+            // 1. TAKOJ najdi AI predlog v trenutnem UI in ga shrani
+            let aiSuggestion = null;
+            
+            // Poiščimo AI suggestion element v trenutnem DOM
+            const deviceRows = document.querySelectorAll('.device-row, .device-card-container');
+            console.log('Found device rows:', deviceRows.length);
+            
+            deviceRows.forEach((row, index) => {
+                const searchData = row.getAttribute('data-search');
+                console.log(`Row ${index} data-search:`, searchData);
+                
+                if (searchData && searchData.includes(ip)) {
+                    console.log('Found matching row for IP:', ip);
+                    const aiElement = row.querySelector('.ai-name-suggestion .text-info');
+                    console.log('AI element found:', !!aiElement);
+                    
+                    if (aiElement) {
+                        const suggestionText = aiElement.textContent;
+                        console.log('Suggestion text:', suggestionText);
+                        
+                        // Oba formata: "Predlog: text" in "Predlog:text" 
+                        if (suggestionText.includes('Predlog:')) {
+                            aiSuggestion = suggestionText.replace('Predlog:', '').replace('Predlog:', '').trim();
+                            console.log('Extracted AI suggestion:', aiSuggestion);
+                        }
+                    }
+                }
+            });
+            
+            if (!aiSuggestion) {
+                console.error('AI suggestion not found in UI');
+                return;
+            }
+            
+            // 2. TAKOJ posodobi ime v input polju
+            const nameInputs = document.querySelectorAll('.custom-name-input');
+            nameInputs.forEach(input => {
+                const row = input.closest('.device-row, .device-card-container');
+                if (row && row.getAttribute('data-search').includes(ip)) {
+                    input.value = aiSuggestion;
+                }
+            });
+            
+            // 3. V ozadju shrani ime + potrdi AI predlog
+            Promise.all([
+                // Shrani ime naprave
+                fetch('/api/update-device-name', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip: ip, custom_name: aiSuggestion})
+                }),
+                // Potrdi AI suggestion
+                fetch('/api/confirm-ai-suggestion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip: ip, confirmed: true})
+                })
+            ])
+            .then(() => {
+                // Ko je vse shranjeno, osvezi UI da skrije AI predlog
+                loadResults();
+            })
+            .catch(error => {
+                console.error('Error saving:', error);
+                // Če pride do napake, poskusi povrniti na prejšnje stanje
+                loadResults();
+            });
+        }
+
+        function rejectAiNameSuggestion(ip) {
+            // Takoj zavrni AI predlog
+            fetch('/api/confirm-ai-suggestion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ip: ip,
+                    confirmed: false
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    loadResults();
+                } else {
+                    console.error('Failed to reject AI suggestion:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error rejecting AI suggestion:', error);
+            });
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'Nikoli';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString('sl-SI');
+            } catch {
+                return isoString;
+            }
+        }
+
+        function updateTableView(devices) {
+            const tbody = document.getElementById('devices-table');
+            
+            if (devices.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="text-center text-muted">
+                            <i class="fas fa-search fa-2x mb-2"></i><br>
+                            Ni najdenih naprav.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = devices.map(device => {
+                const indicator = device.state === 'up' 
+                    ? '<span class="online-indicator"></span>'
+                    : '<span class="offline-indicator"></span>';
+                
+                const statusBadge = device.state === 'up' 
+                    ? '<span class="badge badge-online">Online</span>'
+                    : '<span class="badge badge-offline">Offline</span>';
+                
+                const ports = device.ports.map(p => {
+                    const isWebPort = [80, 443, 8080, 8443, 3000, 3001, 5000, 8000].includes(p.port);
+                    const protocol = (p.port === 443 || p.port === 8443) ? 'https' : 'http';
+                    
+                    if (isWebPort) {
+                        const url = `${protocol}://${device.ip}:${p.port}`;
+                        return `<a href="${url}" target="_blank" class="port-badge port-link" title="Odpri ${url}">${p.port}/${p.protocol}</a>`;
+                    } else {
+                        return `<span class="port-badge">${p.port}/${p.protocol}</span>`;
+                    }
+                }).join(' ');
+
+                // AI suggestion as name suggestion
+                let customNameInput = '';
+                if (device.ai_suggestion && !device.ai_confirmed) {
+                    customNameInput = `
+                        <div class="ai-name-suggestion" data-ip="${device.ip}" data-suggestion="${device.ai_suggestion}">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-robot text-info me-1"></i>
+                                <small class="text-info">Predlog: ${device.ai_suggestion}</small>
+                            </div>
+                            <div class="mb-1">
+                                <button class="btn btn-xs btn-success" onclick="acceptAiNameSuggestion('${device.ip}')" title="Uporabi kot ime" style="margin-right: 5px;">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-xs btn-danger" onclick="rejectAiNameSuggestion('${device.ip}')" title="Zavrni predlog">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="custom-name-input form-control form-control-sm" 
+                                value="${device.custom_name || ''}" 
+                                placeholder="Ali dodaj svoje ime..."
+                                onblur="updateDeviceName('${device.ip}', this.value)"
+                                onkeypress="if(event.key==='Enter') this.blur()"
+                                style="font-size: 0.8em;">
+                        </div>
+                    `;
+                } else {
+                    customNameInput = `<input type="text" class="custom-name-input" 
+                        value="${device.custom_name || ''}" 
+                        placeholder="Klikni za dodajanje imena..."
+                        onblur="updateDeviceName('${device.ip}', this.value)"
+                        onkeypress="if(event.key==='Enter') this.blur()">`;
+                }
+
+                // Action button - scan indicator + rescan button
+                let actionButton = '';
+                if (device.detailed_scan_pending) {
+                    actionButton = `<span class="badge bg-warning text-dark">
+                        <i class="fas fa-spinner fa-spin"></i> Skeniranje...
+                    </span>`;
+                } else {
+                    actionButton = `<button class="btn btn-sm btn-outline-primary" 
+                        onclick="rescanDevice('${device.ip}')" 
+                        title="Ponovno skeniraj napravo">
+                        <i class="fas fa-search"></i>
+                    </button>`;
+                }
+
+                const deviceIcon = getDeviceIcon(device);
+                
+                return `
+                    <tr class="device-row" data-search="${device.ip} ${device.hostname} ${device.vendor} ${device.mac} ${device.custom_name}">
+                        <td>${indicator}${statusBadge}</td>
+                        <td><i class="${deviceIcon}"></i> <strong>${device.ip}</strong></td>
+                        <td>${device.hostname || '-'}</td>
+                        <td>${customNameInput}</td>
+                        <td><small>${device.mac || '-'}</small></td>
+                        <td>${device.vendor || '-'}</td>
+                        <td><small>${device.os || '-'}</small></td>
+                        <td>${ports || '-'}</td>
+                        <td><small>${formatDateTime(device.last_seen || device.scan_time)}</small></td>
+                        <td>${actionButton}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateCardsView(devices) {
+            const container = document.getElementById('devices-cards');
+            
+            if (devices.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center text-muted">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <h5>Ni najdenih naprav</h5>
+                        <p>Poskusite skenirati omrežje.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = devices.map(device => {
+                const icon = getDeviceIcon(device);
+                const indicator = device.state === 'up' 
+                    ? '<span class="online-indicator"></span>'
+                    : '<span class="offline-indicator"></span>';
+                    
+                const ports = device.ports.map(p => {
+                    const isWebPort = [80, 443, 8080, 8443, 3000, 3001, 5000, 8000].includes(p.port);
+                    const protocol = (p.port === 443 || p.port === 8443) ? 'https' : 'http';
+                    
+                    if (isWebPort) {
+                        const url = `${protocol}://${device.ip}:${p.port}`;
+                        return `<a href="${url}" target="_blank" class="port-badge port-link" title="Odpri ${url}">${p.port}/${p.protocol} (${p.service})</a>`;
+                    } else {
+                        return `<span class="port-badge">${p.port}/${p.protocol} (${p.service})</span>`;
+                    }
+                }).join(' ');
+
+                const displayName = device.custom_name || device.hostname || device.ip;
+                
+                // AI suggestion as name suggestion for cards
+                let customNameInput = '';
+                if (device.ai_suggestion && !device.ai_confirmed) {
+                    customNameInput = `
+                        <div class="ai-name-suggestion mt-2 p-2 bg-light border rounded" data-ip="${device.ip}" data-suggestion="${device.ai_suggestion}">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-robot text-info me-1"></i>
+                                <small class="text-info"><strong>Predlog:</strong> ${device.ai_suggestion}</small>
+                            </div>
+                            <div class="mb-2">
+                                <button class="btn btn-xs btn-success" onclick="acceptAiNameSuggestion('${device.ip}')" title="Uporabi kot ime" style="margin-right: 5px;">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-xs btn-danger" onclick="rejectAiNameSuggestion('${device.ip}')" title="Zavrni predlog">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="custom-name-input form-control form-control-sm" 
+                                value="${device.custom_name || ''}" 
+                                placeholder="Ali dodaj svoje ime..."
+                                onblur="updateDeviceName('${device.ip}', this.value)"
+                                onkeypress="if(event.key==='Enter') this.blur()"
+                                style="font-size: 0.8em;">
+                        </div>
+                    `;
+                } else {
+                    customNameInput = `<input type="text" class="custom-name-input" 
+                        value="${device.custom_name || ''}" 
+                        placeholder="Dodaj ime..."
+                        onblur="updateDeviceName('${device.ip}', this.value)"
+                        onkeypress="if(event.key==='Enter') this.blur()"
+                        style="font-size: 0.9em; margin-top: 5px;">`;
+                }
+
+                return `
+                    <div class="col-md-6 col-lg-4 device-card-container" data-search="${device.ip} ${device.hostname} ${device.vendor} ${device.mac} ${device.custom_name}">
+                        <div class="device-card ${device.state !== 'up' ? 'offline' : ''}">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="${icon} device-icon text-primary"></i>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center">
+                                        ${indicator}
+                                        <h5 class="mb-0">${displayName}</h5>
+                                    </div>
+                                    <small class="text-muted">${device.ip}</small>
+                                    ${customNameInput}
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <strong>Status:</strong><br>
+                                    <span class="badge ${device.state === 'up' ? 'badge-online' : 'badge-offline'}">
+                                        ${device.state === 'up' ? 'Online' : 'Offline'}
+                                    </span>
+                                </div>
+                                <div class="col-6">
+                                    <strong>MAC:</strong><br>
+                                    <small>${device.mac || '-'}</small>
+                                </div>
+                            </div>
+                            <hr>
+                            <div>
+                                <strong>Proizvajalec:</strong><br>
+                                <small>${device.vendor || '-'}</small>
+                            </div>
+                            <div class="mt-2">
+                                <strong>OS:</strong><br>
+                                <small>${device.os || '-'}</small>
+                            </div>
+                            ${ports ? `<div class="mt-3"><strong>Odprte vrata:</strong><br>${ports}</div>` : ''}
+                            <div class="mt-3 d-flex justify-content-between align-items-center">
+                                <small class="text-muted">Zadnje aktivno: ${formatDateTime(device.last_seen || device.scan_time)}</small>
+                                ${device.detailed_scan_pending ? 
+                                    `<span class="badge bg-warning text-dark">
+                                        <i class="fas fa-spinner fa-spin"></i> Skeniranje...
+                                    </span>` :
+                                    `<button class="btn btn-sm btn-outline-primary" 
+                                        onclick="rescanDevice('${device.ip}')" 
+                                        title="Ponovno skeniraj napravo">
+                                        <i class="fas fa-search"></i>
+                                    </button>`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function getDeviceIcon(device) {
+            const hostname = (device.hostname || '').toLowerCase();
+            const vendor = (device.vendor || '').toLowerCase();
+            const os = (device.os || '').toLowerCase();
+            const customName = (device.custom_name || '').toLowerCase();
+            
+            // Vendor specific icons
+            if (vendor.includes('apple')) return 'fab fa-apple text-secondary';
+            if (vendor.includes('cisco')) return 'fas fa-network-wired text-primary';
+            if (vendor.includes('raspberry') || vendor.includes('pi foundation')) return 'fab fa-raspberry-pi text-danger';
+            if (vendor.includes('xiaomi')) return 'fab fa-android text-success';
+            if (vendor.includes('samsung')) return 'fab fa-android text-info';
+            if (vendor.includes('intel')) return 'fas fa-microchip text-primary';
+            if (vendor.includes('dell') || vendor.includes('hp')) return 'fas fa-desktop text-dark';
+            if (vendor.includes('netgear') || vendor.includes('tp-link') || vendor.includes('d-link')) return 'fas fa-wifi text-warning';
+            if (vendor.includes('microsoft')) return 'fab fa-microsoft text-info';
+            
+            // Hostname based detection
+            if (hostname.includes('router') || hostname.includes('gateway')) return 'fas fa-wifi text-warning';
+            if (hostname.includes('printer') || hostname.includes('canon') || hostname.includes('epson') || hostname.includes('brother')) return 'fas fa-print text-secondary';
+            if (hostname.includes('nas') || hostname.includes('synology') || hostname.includes('qnap')) return 'fas fa-hdd text-info';
+            if (hostname.includes('camera') || hostname.includes('cam') || hostname.includes('hikvision')) return 'fas fa-video text-success';
+            if (hostname.includes('tv') || hostname.includes('samsung') || hostname.includes('lg')) return 'fas fa-tv text-dark';
+            if (hostname.includes('phone') || hostname.includes('iphone') || hostname.includes('android')) return 'fas fa-mobile-alt text-primary';
+            if (hostname.includes('laptop') || hostname.includes('macbook')) return 'fas fa-laptop text-secondary';
+            if (hostname.includes('tablet') || hostname.includes('ipad')) return 'fas fa-tablet-alt text-info';
+            if (hostname.includes('esp') || hostname.includes('arduino') || hostname.includes('iot')) return 'fas fa-microchip text-warning';
+            if (hostname.includes('bosch') || hostname.includes('siemens')) return 'fas fa-industry text-primary';
+            
+            // OS based detection
+            if (os.includes('linux')) return 'fab fa-linux text-dark';
+            if (os.includes('windows')) return 'fab fa-windows text-info';
+            if (os.includes('mac') || os.includes('darwin')) return 'fab fa-apple text-secondary';
+            if (os.includes('android')) return 'fab fa-android text-success';
+            if (os.includes('ios')) return 'fab fa-apple text-secondary';
+            
+            // Port based detection
+            if (device.ports && device.ports.length > 0) {
+                const ports = device.ports.map(p => p.port);
+                
+                // Web servers
+                if (ports.some(p => [80, 443, 8080, 8443].includes(p))) {
+                    // Check for specific web services
+                    const services = device.ports.map(p => (p.service || '').toLowerCase()).join(' ');
+                    if (services.includes('nginx') || services.includes('apache')) return 'fas fa-server text-success';
+                    if (services.includes('docker')) return 'fab fa-docker text-info';
+                    return 'fas fa-globe text-primary';
+                }
+                
+                // Network equipment
+                if (ports.includes(161) || ports.includes(23)) return 'fas fa-network-wired text-warning';
+                
+                // Database servers
+                if (ports.some(p => [3306, 5432, 27017, 1433].includes(p))) return 'fas fa-database text-info';
+                
+                // SSH/Terminal access
+                if (ports.includes(22)) return 'fas fa-terminal text-success';
+                
+                // File sharing
+                if (ports.some(p => [21, 445, 139, 2049].includes(p))) return 'fas fa-folder-open text-warning';
+                
+                // Email servers
+                if (ports.some(p => [25, 110, 143, 993, 995].includes(p))) return 'fas fa-envelope text-primary';
+                
+                // Media/streaming
+                if (ports.some(p => [554, 1935, 8554].includes(p))) return 'fas fa-play-circle text-danger';
+                
+                // IoT/Smart devices
+                if (ports.some(p => [1883, 8883, 5683].includes(p))) return 'fas fa-home text-success';
+            }
+            
+            // Default based on IP range (common patterns)
+            const ip = device.ip || '';
+            if (ip.endsWith('.1') || ip.endsWith('.254')) return 'fas fa-wifi text-warning'; // Likely router
+            if (ip.includes('192.168.1.1') || ip.includes('10.0.0.1')) return 'fas fa-wifi text-warning';
+            
+            // Default fallback
+            return 'fas fa-question-circle text-muted';
+        }
+
+        function toggleView(view, saveConfig = true) {
+            currentView = view;
+            const tableView = document.getElementById('table-view');
+            const cardsView = document.getElementById('cards-view');
+            const tableBtn = document.getElementById('table-view-btn');
+            const cardsBtn = document.getElementById('cards-view-btn');
+
+            if (view === 'table') {
+                tableView.style.display = 'block';
+                cardsView.style.display = 'none';
+                tableBtn.classList.add('active');
+                cardsBtn.classList.remove('active');
+            } else {
+                tableView.style.display = 'none';
+                cardsView.style.display = 'block';
+                tableBtn.classList.remove('active');
+                cardsBtn.classList.add('active');
+            }
+
+            // Shrani nastavitev v config
+            if (saveConfig) {
+                fetch('/api/view-mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ mode: view })
+                }).catch(error => console.error('Error saving view mode config:', error));
+            }
+
+            // Reload results to update the correct view
+            loadResults();
+        }
+
+        let searchTimeout;
+        
+        function filterDevices() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const devices = document.querySelectorAll('[data-search]');
+
+            devices.forEach(device => {
+                const searchData = device.getAttribute('data-search').toLowerCase();
+                if (searchData.includes(searchTerm)) {
+                    device.style.display = '';
+                } else {
+                    device.style.display = 'none';
+                }
+            });
+            
+            // Shrani iskalni niz z zamikom (throttling)
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ search: document.getElementById('search-input').value })
+                }).catch(error => console.error('Error saving search config:', error));
+            }, 1000); // Shrani po 1 sekundi nedejavnosti
+        }
+
+        function autoRefresh() {
+            const btn = document.getElementById('auto-refresh-btn');
+            
+            if (autoRefreshEnabled) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshEnabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Samo-osveži: OFF';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-success');
+            } else {
+                autoRefreshInterval = setInterval(() => {
+                    // Tiho osveži rezultate brez preloader-ja
+                    loadResults();
+                }, 5000); // Every 5 seconds for real-time updates
+                autoRefreshEnabled = true;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Samo-osveži: ON';
+                btn.classList.remove('btn-outline-success');
+                btn.classList.add('btn-success');
+            }
+            
+            // Shrani nastavitev v config
+            fetch('/api/auto-refresh', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ enabled: autoRefreshEnabled })
+            }).catch(error => console.error('Error saving auto-refresh config:', error));
+        }
+    </script>
+</body>
+</html>

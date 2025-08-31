@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  network-scanner:
+    build: .
+    container_name: network-scanner
+    network_mode: "host"  # Potrebno za skeniranje lokalnega omrežja
+    cap_add:
+      - NET_ADMIN        # Potrebno za nmap
+      - NET_RAW          # Potrebno za ping in raw sockete
+    environment:
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs  # Za shranjevanje logov (opcijsko)
+      - ./devices.json:/app/devices.json  # Persistent storage za naprave
+      - ./config.json:/app/config.json    # Persistent storage za config
+    restart: unless-stopped
