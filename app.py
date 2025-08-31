@@ -22,6 +22,15 @@ from upnpclient import discover
 
 app = Flask(__name__)
 
+@app.after_request
+def add_security_headers(response):
+    """Dodaj varnostne glave"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY' 
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    return response
+
 # Nastavi logging
 logging.basicConfig(
     level=logging.INFO,
@@ -407,6 +416,10 @@ def get_enhanced_device_info(ip):
         
         # Poskusi SNMP če je na voljo
         try:
+            # Validiraj IP naslov
+            import ipaddress
+            ipaddress.ip_address(ip)
+            
             result = subprocess.run(
                 ['snmpget', '-v', '2c', '-c', 'public', ip, 'sysDescr.0'],
                 capture_output=True, text=True, timeout=2
@@ -1778,6 +1791,15 @@ def get_mac_from_arp(ip):
     """Pridobi MAC naslov iz sistemske ARP tabele"""
     try:
         import subprocess
+        import ipaddress
+        
+        # Validiraj IP naslov
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            logger.warning(f"Invalid IP address for ARP lookup: {ip}")
+            return None
+            
         # Preberi ARP tabelo
         result = subprocess.run(['arp', '-n'], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
