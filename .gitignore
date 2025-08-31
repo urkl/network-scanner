@@ -72,3 +72,40 @@ venv.bak/
 
 # System
 Thumbs.db
+
+# Project specific
+config.json
+*.db
+*.sqlite
+*.sqlite3
+cache.json
+network_cache.json
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env.local
+.env.production
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Screenshots (optional - remove if you want to commit them)
+screenshots/*.png
+screenshots/*.jpg
+!screenshots/README.md
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Security sensitive files
+*.pem
+*.key
+*.crt

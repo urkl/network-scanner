@@ -368,30 +368,6 @@
                 </div>
             </div>
 
-            <!-- Controls -->
-            <div class="row mb-4">
-                <div class="col-md-4">
-                    <div class="input-group">
-                        <input type="text" id="network-input" class="form-control" placeholder="Omrežni rang (npr. 192.168.1.0/24)">
-                        <button class="btn btn-primary" onclick="startScan(false)" 
-                                title="Hitro skeniranje - posodobi status in poišči nove naprave">
-                            <i class="fas fa-search"></i> Hitro skeniranje
-                        </button>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-warning" onclick="startScan(true)"
-                            title="Polno skeniranje - skeniraj vse naprave znova">
-                        <i class="fas fa-search-plus"></i> Polno skeniranje
-                    </button>
-                </div>
-                <div class="col-md-6">
-                    <div class="input-group search-box">
-                        <input type="text" id="search-input" class="form-control" placeholder="Poišči napravo..." onkeyup="filterDevices()">
-                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    </div>
-                </div>
-            </div>
 
             <!-- Toggle View -->
             <div class="mb-3">
@@ -473,6 +449,9 @@
     <script>
         let autoRefreshInterval;
         let autoRefreshEnabled = false;
+        let autoRefreshPaused = false;
+        let userIsTyping = false;
+        let userTypingTimeout = null;
         let currentView = 'table';
         let availableInterfaces = [];
 
@@ -682,13 +661,17 @@
             if (data.cache_info) {
                 const cacheAge = data.cache_info.cache_age_hours;
                 document.getElementById('cache-info').textContent = 
-                    cacheAge > 0 ? `${cacheAge}h` : 'Ni cache';
+                    data.cache_info.has_cache ? `${cacheAge}h` : 'Ni cache';
             }
 
-            if (currentView === 'table') {
-                updateTableView(data.results);
+            if (!userIsTyping) {
+                if (currentView === 'table') {
+                    updateTableView(data.results);
+                } else {
+                    updateCardsView(data.results);
+                }
             } else {
-                updateCardsView(data.results);
+                console.log('Skipping update - user is typing');
             }
         }
 
@@ -831,6 +814,11 @@
         }
 
         function updateTableView(devices) {
+            if (userIsTyping) {
+                console.log('Skipping table update - user is typing');
+                return;
+            }
+            
             const tbody = document.getElementById('devices-table');
             
             if (devices.length === 0) {
@@ -868,7 +856,7 @@
 
                 // AI suggestion as name suggestion
                 let customNameInput = '';
-                if (device.ai_suggestion && !device.ai_confirmed) {
+                if (device.ai_suggestion && !device.ai_confirmed && !device.custom_name) {
                     customNameInput = `
                         <div class="ai-name-suggestion" data-ip="${device.ip}" data-suggestion="${device.ai_suggestion}">
                             <div class="d-flex align-items-center mb-1">
@@ -886,7 +874,10 @@
                             <input type="text" class="custom-name-input form-control form-control-sm" 
                                 value="${device.custom_name || ''}" 
                                 placeholder="Ali dodaj svoje ime..."
-                                onblur="updateDeviceName('${device.ip}', this.value)"
+                                data-device-ip="${device.ip}"
+                                onfocus="pauseAutoRefresh()"
+                                oninput="setUserTyping()"
+                                onblur="updateDeviceName('${device.ip}', this.value); resumeAutoRefresh()"
                                 onkeypress="if(event.key==='Enter') this.blur()"
                                 style="font-size: 0.8em;">
                         </div>
@@ -895,7 +886,10 @@
                     customNameInput = `<input type="text" class="custom-name-input" 
                         value="${device.custom_name || ''}" 
                         placeholder="Klikni za dodajanje imena..."
-                        onblur="updateDeviceName('${device.ip}', this.value)"
+                        data-device-ip="${device.ip}"
+                        onfocus="pauseAutoRefresh()"
+                        oninput="setUserTyping()"
+                        onblur="updateDeviceName('${device.ip}', this.value); resumeAutoRefresh()"
                         onkeypress="if(event.key==='Enter') this.blur()">`;
                 }
 
@@ -916,7 +910,7 @@
                 const deviceIcon = getDeviceIcon(device);
                 
                 return `
-                    <tr class="device-row" data-search="${device.ip} ${device.hostname} ${device.vendor} ${device.mac} ${device.custom_name}">
+                    <tr class="device-row" data-search="${device.ip} ${device.hostname || ''} ${device.vendor || ''} ${device.mac || ''} ${device.custom_name || ''} ${device.os || ''} ${device.ai_suggestion || ''} ${device.ports ? device.ports.map(p => p.service).join(' ') : ''}">
                         <td>${indicator}${statusBadge}</td>
                         <td><i class="${deviceIcon}"></i> <strong>${device.ip}</strong></td>
                         <td>${device.hostname || '-'}</td>
@@ -933,6 +927,11 @@
         }
 
         function updateCardsView(devices) {
+            if (userIsTyping) {
+                console.log('Skipping cards update - user is typing');
+                return;
+            }
+            
             const container = document.getElementById('devices-cards');
             
             if (devices.length === 0) {
@@ -968,7 +967,7 @@
                 
                 // AI suggestion as name suggestion for cards
                 let customNameInput = '';
-                if (device.ai_suggestion && !device.ai_confirmed) {
+                if (device.ai_suggestion && !device.ai_confirmed && !device.custom_name) {
                     customNameInput = `
                         <div class="ai-name-suggestion mt-2 p-2 bg-light border rounded" data-ip="${device.ip}" data-suggestion="${device.ai_suggestion}">
                             <div class="d-flex align-items-center mb-1">
@@ -986,7 +985,10 @@
                             <input type="text" class="custom-name-input form-control form-control-sm" 
                                 value="${device.custom_name || ''}" 
                                 placeholder="Ali dodaj svoje ime..."
-                                onblur="updateDeviceName('${device.ip}', this.value)"
+                                data-device-ip="${device.ip}"
+                                onfocus="pauseAutoRefresh()"
+                                oninput="setUserTyping()"
+                                onblur="updateDeviceName('${device.ip}', this.value); resumeAutoRefresh()"
                                 onkeypress="if(event.key==='Enter') this.blur()"
                                 style="font-size: 0.8em;">
                         </div>
@@ -995,13 +997,16 @@
                     customNameInput = `<input type="text" class="custom-name-input" 
                         value="${device.custom_name || ''}" 
                         placeholder="Dodaj ime..."
-                        onblur="updateDeviceName('${device.ip}', this.value)"
+                        data-device-ip="${device.ip}"
+                        onfocus="pauseAutoRefresh()"
+                        oninput="setUserTyping()"
+                        onblur="updateDeviceName('${device.ip}', this.value); resumeAutoRefresh()"
                         onkeypress="if(event.key==='Enter') this.blur()"
                         style="font-size: 0.9em; margin-top: 5px;">`;
                 }
 
                 return `
-                    <div class="col-md-6 col-lg-4 device-card-container" data-search="${device.ip} ${device.hostname} ${device.vendor} ${device.mac} ${device.custom_name}">
+                    <div class="col-md-6 col-lg-4 device-card-container" data-search="${device.ip} ${device.hostname || ''} ${device.vendor || ''} ${device.mac || ''} ${device.custom_name || ''} ${device.os || ''} ${device.ai_suggestion || ''} ${device.ports ? device.ports.map(p => p.service).join(' ') : ''}">
                         <div class="device-card ${device.state !== 'up' ? 'offline' : ''}">
                             <div class="d-flex align-items-center mb-3">
                                 <i class="${icon} device-icon text-primary"></i>
@@ -1195,6 +1200,25 @@
                     body: JSON.stringify({ search: document.getElementById('search-input').value })
                 }).catch(error => console.error('Error saving search config:', error));
             }, 1000); // Shrani po 1 sekundi nedejavnosti
+        }
+
+        function setUserTyping() {
+            userIsTyping = true;
+            if (userTypingTimeout) {
+                clearTimeout(userTypingTimeout);
+            }
+            userTypingTimeout = setTimeout(() => {
+                userIsTyping = false;
+                console.log('User stopped typing - resuming updates');
+            }, 2000); // 2 seconds after user stops typing
+        }
+
+        function pauseAutoRefresh() {
+            autoRefreshPaused = true;
+        }
+
+        function resumeAutoRefresh() {
+            autoRefreshPaused = false;
         }
 
         function autoRefresh() {

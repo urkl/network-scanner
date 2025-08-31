@@ -17,6 +17,8 @@ import netifaces
 import socket
 import subprocess
 import re
+from zeroconf import Zeroconf, ServiceBrowser
+from upnpclient import discover
 
 app = Flask(__name__)
 
@@ -70,9 +72,14 @@ def scan_network_background(network_range, force_full_scan=False):
     current_scan_status['scanning'] = True
     current_scan_status['scan_type'] = 'Polno skeniranje' if force_full_scan else 'Hitro skeniranje'
     current_scan_status['progress'] = 0
-    current_scan_status['start_time'] = datetime.now().isoformat()
+    start_time = datetime.now()
+    current_scan_status['start_time'] = start_time.isoformat()
     
     print(f"[*] Začenjam pametno skeniranje omrežja: {network_range}")
+    
+    # Timeout protection - konfiguriraj maksimalni čas skeniranja
+    config = load_config()
+    max_scan_time = config.get('scan_settings', {}).get('timeout', 300)  # 5 minut default
     
     try:
         # Preveri če je zahtevano zaustavitev
@@ -129,10 +136,16 @@ def scan_network_background(network_range, force_full_scan=False):
             
             # Podrobno skeniranje vsake aktivne naprave
             for i, host in enumerate(active_ips, 1):
-                # Preveri če je zahtevano zaustavitev
+                # Preveri če je zahtevano zaustavitev ali timeout
                 if stop_scan_requested:
                     print("[*] Skeniranje prekinjeno po zahtevi")
                     raise KeyboardInterrupt("Skeniranje prekinjeno")
+                
+                # Preveri timeout
+                elapsed_time = (datetime.now() - start_time).seconds
+                if elapsed_time > max_scan_time:
+                    print(f"[!] Skeniranje prekinjeno zaradi timeout ({max_scan_time}s)")
+                    raise KeyboardInterrupt("Timeout")
                     
                 try:
                     current_scan_status['current_host'] = f'Skeniram {host}'
@@ -183,17 +196,28 @@ def scan_network_background(network_range, force_full_scan=False):
                     
     except Exception as e:
         print(f"[!] Napaka pri skeniranju: {e}")
-    
-    # Obnovi custom imena če so bila shranjena
-    if 'custom_names' in locals():
-        restore_custom_names(custom_names)
-    
-    last_scan_time = datetime.now().isoformat()
-    scan_in_progress = False
-    current_scan_status['scanning'] = False
-    current_scan_status['progress'] = 100
-    current_scan_status['current_host'] = 'Končano'
-    current_scan_status['completed_hosts'] = current_scan_status.get('total_hosts', 0)
+    except KeyboardInterrupt:
+        print("[!] Skeniranje prekinjeno")
+    finally:
+        # Preveri ali je bilo skeniranje prekinjeno pred resetom
+        was_interrupted = stop_scan_requested
+        
+        # Vedno resetiraj status ne glede na način končanja
+        scan_in_progress = False
+        current_scan_status['scanning'] = False
+        stop_scan_requested = False
+        
+        # Obnovi custom imena če so bila shranjena
+        if 'custom_names' in locals():
+            restore_custom_names(custom_names)
+        
+        # Nastavi končni status
+        last_scan_time = datetime.now().isoformat()
+        current_scan_status['progress'] = 100 if not was_interrupted else 0
+        current_scan_status['current_host'] = 'Prekinjeno' if was_interrupted else 'Končano'
+        current_scan_status['completed_hosts'] = current_scan_status.get('total_hosts', 0)
+        
+        print(f"[*] Scan finally block: interrupted={was_interrupted}, in_progress={scan_in_progress}")
     
     # Shrani v cache
     save_cache()
@@ -267,15 +291,58 @@ default_config = {
 }
 
 def load_config():
-    """Naloži konfiguracijo"""
+    """Naloži konfiguracijo - prioriteta environment variables nad datoteko"""
+    config = default_config.copy()
+    
+    # Naloži iz datoteke če obstaja
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                file_config = json.load(f)
+                config.update(file_config)
         except Exception as e:
             print(f"[!] Napaka pri nalaganju config: {e}")
     
-    return default_config.copy()
+    # Prepiši z environment variables
+    if os.getenv('PREFERRED_INTERFACE'):
+        config['preferred_interface'] = os.getenv('PREFERRED_INTERFACE')
+    
+    if os.getenv('DEFAULT_NETWORK'):
+        config['last_network'] = os.getenv('DEFAULT_NETWORK')
+    
+    if os.getenv('AUTO_REFRESH'):
+        config['auto_refresh_enabled'] = os.getenv('AUTO_REFRESH').lower() == 'true'
+    
+    if os.getenv('VIEW_MODE'):
+        config['view_mode'] = os.getenv('VIEW_MODE')
+    
+    if os.getenv('SCAN_TIMEOUT'):
+        try:
+            config['scan_settings']['timeout'] = int(os.getenv('SCAN_TIMEOUT'))
+        except ValueError:
+            pass
+    
+    if os.getenv('TOP_PORTS'):
+        try:
+            config['scan_settings']['top_ports'] = int(os.getenv('TOP_PORTS'))
+        except ValueError:
+            pass
+    
+    # AI nastavitve iz env vars
+    ai_settings = config.get('ai_settings', {})
+    
+    if os.getenv('AI_ENABLED'):
+        ai_settings['enabled'] = os.getenv('AI_ENABLED').lower() == 'true'
+    
+    if os.getenv('AI_API_KEY'):
+        ai_settings['api_key'] = os.getenv('AI_API_KEY')
+    
+    if os.getenv('AI_PROVIDER'):
+        ai_settings['provider'] = os.getenv('AI_PROVIDER')
+    
+    config['ai_settings'] = ai_settings
+    
+    return config
 
 def save_config(config):
     """Shrani konfiguracijo"""
@@ -381,6 +448,168 @@ def get_enhanced_device_info(ip):
         logger.error(f"Error getting enhanced info for {ip}: {e}")
     
     return info
+
+class MDNSListener:
+    """mDNS/Bonjour listener za odkrivanje naprav"""
+    
+    def __init__(self):
+        self.devices = {}
+        self.zc = None
+        self.browser = None
+        
+    def add_service(self, zc, type_, name):
+        """Dodaj novo odkrito storitev"""
+        try:
+            info = zc.get_service_info(type_, name)
+            if info:
+                addresses = [socket.inet_ntoa(addr) for addr in info.addresses]
+                for address in addresses:
+                    if address not in self.devices:
+                        self.devices[address] = {}
+                    
+                    # Zberi informacije o storitvi
+                    self.devices[address].update({
+                        'mdns_name': info.name.split('.')[0],
+                        'mdns_type': type_,
+                        'mdns_port': info.port,
+                        'mdns_hostname': info.server.rstrip('.') if info.server else '',
+                        'mdns_properties': {key.decode(): value.decode() if isinstance(value, bytes) else value 
+                                          for key, value in info.properties.items()}
+                    })
+                    
+                    logger.info(f"mDNS discovered: {address} - {info.name} ({type_})")
+        except Exception as e:
+            logger.debug(f"mDNS service add error: {e}")
+    
+    def remove_service(self, zc, type_, name):
+        """Odstrani storitev"""
+        pass
+    
+    def start_discovery(self, timeout=10):
+        """Začni mDNS odkrivanje"""
+        try:
+            self.zc = Zeroconf()
+            
+            # Najpogostejše mDNS storitve
+            services = [
+                "_http._tcp.local.",
+                "_https._tcp.local.",
+                "_airplay._tcp.local.",
+                "_googlecast._tcp.local.", 
+                "_chromecast._tcp.local.",
+                "_printer._tcp.local.",
+                "_ipp._tcp.local.",
+                "_ssh._tcp.local.",
+                "_ftp._tcp.local.",
+                "_smb._tcp.local.",
+                "_afpovertcp._tcp.local.",
+                "_nfs._tcp.local.",
+                "_homekit._tcp.local.",
+                "_hap._tcp.local.",
+                "_spotify-connect._tcp.local.",
+                "_sonos._tcp.local.",
+                "_raop._tcp.local.",
+                "_device-info._tcp.local."
+            ]
+            
+            self.browser = ServiceBrowser(self.zc, services, self)
+            
+            # Počakaj da se odkrijejo naprave
+            time.sleep(timeout)
+            
+            return self.devices
+            
+        except Exception as e:
+            logger.error(f"mDNS discovery error: {e}")
+            return {}
+        finally:
+            self.stop_discovery()
+    
+    def stop_discovery(self):
+        """Ustavi mDNS odkrivanje"""
+        try:
+            if self.browser:
+                self.browser.cancel()
+            if self.zc:
+                self.zc.close()
+        except Exception as e:
+            logger.debug(f"mDNS cleanup error: {e}")
+
+def discover_mdns_devices():
+    """Odkri naprave preko mDNS/Bonjour"""
+    try:
+        listener = MDNSListener()
+        devices = listener.start_discovery(timeout=8)
+        logger.info(f"mDNS discovery found {len(devices)} devices")
+        return devices
+    except Exception as e:
+        logger.error(f"mDNS discovery failed: {e}")
+        return {}
+
+def discover_upnp_devices():
+    """Odkri naprave preko UPnP/SSDP"""
+    devices = {}
+    try:
+        logger.info("Starting UPnP discovery...")
+        upnp_devices = discover(timeout=5)
+        
+        for device in upnp_devices:
+            try:
+                # Dobi IP naslov iz lokacije
+                location = device.location
+                if location:
+                    import urllib.parse
+                    parsed = urllib.parse.urlparse(location)
+                    ip = parsed.hostname
+                    
+                    if ip:
+                        devices[ip] = {
+                            'upnp_device_type': device.device_type,
+                            'upnp_friendly_name': device.friendly_name,
+                            'upnp_manufacturer': device.manufacturer,
+                            'upnp_model_name': device.model_name,
+                            'upnp_model_description': device.model_description,
+                            'upnp_serial_number': getattr(device, 'serial_number', ''),
+                            'upnp_location': location
+                        }
+                        
+                        logger.info(f"UPnP discovered: {ip} - {device.friendly_name} ({device.manufacturer})")
+                        
+            except Exception as e:
+                logger.debug(f"UPnP device processing error: {e}")
+        
+        logger.info(f"UPnP discovery found {len(devices)} devices")
+        return devices
+        
+    except Exception as e:
+        logger.error(f"UPnP discovery failed: {e}")
+        return {}
+
+def enhanced_device_discovery():
+    """Kombinirana detekcija naprav z mDNS in UPnP"""
+    enhanced_info = {}
+    
+    # mDNS odkrivanje
+    try:
+        mdns_devices = discover_mdns_devices()
+        for ip, info in mdns_devices.items():
+            if ip not in enhanced_info:
+                enhanced_info[ip] = {}
+            enhanced_info[ip].update(info)
+    except Exception as e:
+        logger.error(f"mDNS discovery error: {e}")
+    
+    # UPnP odkrivanje  
+    try:
+        upnp_devices = discover_upnp_devices()
+        for ip, info in upnp_devices.items():
+            if ip not in enhanced_info:
+                enhanced_info[ip] = {}
+            enhanced_info[ip].update(info)
+    except Exception as e:
+        logger.error(f"UPnP discovery error: {e}")
+    
+    return enhanced_info
 
 def get_vendor_info(mac_address):
     """Dobi informacije o proizvajalcu iz MAC naslova"""
@@ -985,6 +1214,110 @@ def api_scan_status():
         'elapsed_time': elapsed_time
     })
 
+@app.route('/api/stop-scan', methods=['POST'])
+def api_stop_scan():
+    """Zaustavi trenutno skeniranje"""
+    global stop_scan_requested, scan_in_progress
+    
+    if scan_in_progress:
+        stop_scan_requested = True
+        logger.info("Scan stop requested by user")
+        return jsonify({'status': 'success', 'message': 'Skeniranje se zaustavlja...'})
+    else:
+        return jsonify({'status': 'info', 'message': 'Ni aktivnega skeniranja'})
+
+@app.route('/api/clear-scan-flags', methods=['POST'])
+def api_clear_scan_flags():
+    """Počisti vse viseče scan zastavice"""
+    global scan_results
+    
+    cleared_count = 0
+    for device in scan_results:
+        if device.get('detailed_scan_pending') or device.get('scan_pending'):
+            device['detailed_scan_pending'] = False
+            device['scan_pending'] = False
+            cleared_count += 1
+            logger.info(f"Cleared scan flags for {device['ip']}")
+    
+    if cleared_count > 0:
+        save_cache()
+        return jsonify({'status': 'success', 'message': f'Počiščenih {cleared_count} naprav'})
+    else:
+        return jsonify({'status': 'info', 'message': 'Ni naprav s skeniranjem v teku'})
+
+@app.route('/api/enhanced-discovery', methods=['POST'])
+def api_enhanced_discovery():
+    """Testni endpoint za mDNS in UPnP odkrivanje"""
+    try:
+        logger.info("Starting enhanced device discovery test...")
+        
+        # Sproži mDNS in UPnP odkrivanje
+        enhanced_devices = enhanced_device_discovery()
+        
+        result = {
+            'status': 'success',
+            'devices_found': len(enhanced_devices),
+            'devices': enhanced_devices,
+            'message': f'Odkritih {len(enhanced_devices)} naprav z naprednim skeniranjem'
+        }
+        
+        logger.info(f"Enhanced discovery completed: {len(enhanced_devices)} devices found")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Enhanced discovery failed: {e}")
+        return jsonify({
+            'status': 'error', 
+            'message': f'Napaka pri naprednem skeniranju: {str(e)}'
+        })
+
+@app.route('/api/clear-all', methods=['POST'])
+def api_clear_all():
+    """Izbriše vse podatke in sproži polno skeniranje"""
+    global scan_results, last_scan_time, scan_in_progress, stop_scan_requested
+    
+    try:
+        # Zaustavi trenutno skeniranje če poteka
+        if scan_in_progress:
+            stop_scan_requested = True
+            logger.info("Stopping current scan for clear all")
+            
+        # Počisti vse podatke
+        scan_results = []
+        last_scan_time = None
+        
+        # Izbriši cache datoteko
+        if os.path.exists(CACHE_FILE):
+            os.remove(CACHE_FILE)
+            logger.info("Cache file deleted")
+        
+        # Izbriši bazo (opcijsko - lahko tudi obdržimo zgodovino)
+        clear_database = True  # nastavi na False če želiš obdržati zgodovino
+        if clear_database and os.path.exists(DB_FILE):
+            os.remove(DB_FILE)
+            init_database()  # Ponovno ustvari prazno bazo
+            logger.info("Database cleared and reinitialized")
+        
+        # Počakaj malo da se ustavi trenutno skeniranje
+        import time
+        time.sleep(1)
+        
+        # Sproži novo polno skeniranje
+        config = load_config()
+        network = config.get('last_network') or get_local_network()
+        
+        # Zaženi skeniranje v ločeni niti
+        thread = threading.Thread(target=scan_network_background, args=(network, True))  # Force full scan
+        thread.daemon = True
+        thread.start()
+        
+        logger.info(f"Fresh full scan started for network: {network}")
+        return jsonify({'status': 'success', 'message': 'Vse podatki izbrisani, polno skeniranje zagnano'})
+        
+    except Exception as e:
+        logger.error(f"Error in clear all: {e}")
+        return jsonify({'status': 'error', 'message': f'Napaka: {str(e)}'})
+
 @app.route('/api/results')
 def api_results():
     """Vrne trenutne rezultate skeniranja"""
@@ -1142,6 +1475,15 @@ def continuous_background_scanner():
     
     logger.info(f"Starting continuous background scanner for network: {network}")
     
+    # Počisti vse "viseče" skeniranja ob zagonu
+    for device in scan_results:
+        if device.get('detailed_scan_pending'):
+            logger.info(f"Clearing stuck scan flag for {device['ip']}")
+            device['detailed_scan_pending'] = False
+            device['scan_pending'] = False
+    if scan_results:
+        save_cache()
+    
     while True:
         try:
             # Agresivnejše ping skeniranje za boljše odkrivanje naprav
@@ -1179,12 +1521,16 @@ def continuous_background_scanner():
                 
                 for host in new_hosts:
                     # Takoj dodaj osnovne informacije za prikaz
+                    # Poskusi dobiti MAC iz ARP tabele
+                    mac = get_mac_from_arp(host)
+                    vendor = get_vendor_info(mac) if mac else ''
+                    
                     basic_info = {
                         'ip': host,
                         'hostname': '',
                         'custom_name': get_custom_name_from_db(host),
-                        'mac': '',
-                        'vendor': '',
+                        'mac': mac or '',
+                        'vendor': vendor,
                         'os': '',
                         'state': 'up',
                         'ports': [],
@@ -1218,8 +1564,20 @@ def continuous_background_scanner():
                     device['last_seen'] = current_time.isoformat()
                     
                     # Sproži podrobno skeniranje za naprave brez MAC naslova ali OS info
-                    if (not device.get('mac') or device.get('mac') == '') and device.get('detailed_scan_pending') != True:
+                    # Preveri tudi da ni že v teku ali nedavno poskušano
+                    last_detailed = device.get('detailed_scan_time')
+                    if last_detailed:
+                        try:
+                            last_scan = datetime.fromisoformat(last_detailed)
+                            # Ne skeniraj ponovno če je bilo v zadnjih 5 minutah
+                            if (current_time - last_scan).seconds < 300:
+                                continue
+                        except:
+                            pass
+                    
+                    if (not device.get('mac') or device.get('mac') == '') and not device.get('detailed_scan_pending'):
                         device['detailed_scan_pending'] = True
+                        device['detailed_scan_time'] = current_time.isoformat()  # Zapomni si kdaj smo poskusili
                         detail_thread = threading.Thread(
                             target=detailed_device_scan,
                             args=(device['ip'],)
@@ -1270,6 +1628,12 @@ def detailed_device_scan(host):
                 detailed_nm.scan(hosts=host, arguments='-sS -T4 --top-ports 100')
             except Exception as e2:
                 logger.error(f"Fallback scan also failed for {host}: {e2}")
+                # Počisti zastavico tudi ob napaki
+                for device in scan_results:
+                    if device['ip'] == host:
+                        device['detailed_scan_pending'] = False
+                        device['scan_pending'] = False
+                        break
                 return
         
         if host in detailed_nm.all_hosts():
@@ -1328,6 +1692,23 @@ def detailed_device_scan(host):
                                     'state': port_info['state']
                                 })
                     
+                    # Poskusi pridobiti dodatne informacije z mDNS/UPnP
+                    enhanced_info = {}
+                    try:
+                        # Sproži hitro mDNS/UPnP odkrivanje le za to napravo
+                        enhanced_data = enhanced_device_discovery()
+                        if host in enhanced_data:
+                            enhanced_info = enhanced_data[host]
+                            logger.info(f"Enhanced discovery for {host}: {len(enhanced_info)} properties")
+                    except Exception as e:
+                        logger.debug(f"Enhanced discovery failed for {host}: {e}")
+                    
+                    # Če ni hostname-a iz nmap-a, poskusi iz mDNS/UPnP
+                    if not hostname and enhanced_info.get('mdns_hostname'):
+                        hostname = enhanced_info['mdns_hostname']
+                    if not hostname and enhanced_info.get('upnp_friendly_name'):
+                        hostname = enhanced_info['upnp_friendly_name']
+                    
                     # Analiziraj tip naprave
                     device_type = detect_device_type(hostname, vendor, os_info, ports)
                     device_description = generate_device_description(hostname, vendor, os_info, ports, device_type)
@@ -1362,16 +1743,23 @@ def detailed_device_scan(host):
                     
     except Exception as e:
         logger.error(f"Error in detailed scan for {host}: {e}")
-        # Označi da je skeniranje končano tudi če je bila napaka
+    finally:
+        # VEDNO počisti zastavice na koncu - tudi ob napakah
         for device in scan_results:
             if device['ip'] == host:
                 device['scan_pending'] = False
+                device['detailed_scan_pending'] = False
                 break
+        # Shrani spremembe
+        save_cache()
 
 if __name__ == '__main__':
     # Naloži cache in config ob zagonu
     cache_loaded = load_cache()
     config = load_config()
+    
+    # Flask nastavitve iz env vars
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'changeme_in_production')
     
     # Zaznaj lokalno omrežje ali uporabi shranjeno
     network = config.get('last_network') or get_local_network()
@@ -1380,6 +1768,10 @@ if __name__ == '__main__':
     
     if config.get('preferred_interface'):
         print(f"Preferred interface: {config['preferred_interface']}")
+    
+    # Debug informacije o konfiguraciji
+    if config.get('ai_settings', {}).get('enabled'):
+        print("[*] AI analiza omogočena")
     
     # Zaženi hitro kontinuirano skeniranje v ozadju
 def get_mac_from_arp(ip):
@@ -1611,4 +2003,6 @@ if __name__ == '__main__':
     print("[*] Naprave se bodo prikazale v nekaj sekundah...")
     print(f"[*] Odprite http://localhost:5000 v brskalniku")
     
-    app.run(host='0.0.0.0', port=5000, debug=False)  # Debug=False da se ne restartira
+    # Flask run nastavitve iz env vars
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host='0.0.0.0', port=5000, debug=debug)

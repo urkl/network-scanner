@@ -383,7 +383,7 @@ copies or substantial portions of the Software.
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-username/network-scanner&type=Date)](https://star-history.com/#your-username/network-scanner&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=your-username/network-scanner&type=Date)](https://star-history.com/urkl/network-scanner&Date)
 
 ---
 

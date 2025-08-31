@@ -8,7 +8,12 @@ RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
     build-essential \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Nastavi časovni pas
+ENV TZ=Europe/Ljubljana
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Nastavi delovno mapo
 WORKDIR /app

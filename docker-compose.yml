@@ -1,17 +1,53 @@
-version: '3.8'
 
 services:
   network-scanner:
     build: .
-    container_name: network-scanner
-    network_mode: "host"  # Potrebno za skeniranje lokalnega omrežja
-    cap_add:
-      - NET_ADMIN        # Potrebno za nmap
-      - NET_RAW          # Potrebno za ping in raw sockete
-    environment:
-      - FLASK_ENV=production
-    volumes:
-      - ./logs:/app/logs  # Za shranjevanje logov (opcijsko)
-      - ./devices.json:/app/devices.json  # Persistent storage za naprave
-      - ./config.json:/app/config.json    # Persistent storage za config
+    container_name: network_scanner
     restart: unless-stopped
+    network_mode: host
+    privileged: true  # Needed for nmap and network scanning
+    
+    environment:
+      # AI Configuration
+      - AI_ENABLED=${AI_ENABLED:-false}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      
+      # Network Configuration
+      - DEFAULT_NETWORK=${DEFAULT_NETWORK:-192.168.1.0/24}
+      - PREFERRED_INTERFACE=${PREFERRED_INTERFACE:-}
+      
+      # Scan Settings
+      - SCAN_TIMEOUT=${SCAN_TIMEOUT:-300}
+      - TOP_PORTS=${TOP_PORTS:-200}
+      - AUTO_REFRESH=${AUTO_REFRESH:-true}
+      - VIEW_MODE=${VIEW_MODE:-table}
+      
+      # Flask Configuration
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+      
+      # Security
+      - SECRET_KEY=${SECRET_KEY:-changeme_in_production}
+      
+    volumes:
+      # Persistent storage for device data and cache
+      - ./data:/app/data:rw
+      - ./config.json:/app/config.json:rw
+      - ./cache:/app/cache:rw
+      
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/results"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+      
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
