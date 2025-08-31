@@ -28,4 +28,4 @@ Preprosto Python orodje za skeniranje lokalnega omrežja, ki uporablja `nmap` za
 Skripto je potrebno zagnati z `sudo` pravicami za najboljše rezultate (npr. zaznavanje OS). Omrežni rang podajte kot argument.
 
 ```bash
-sudo python3 scanner.py <omrezni_rang>
+sudo ./venv/bin/python3 scanner.py 192.168.1.0/24
