@@ -749,52 +749,27 @@
         }
 
         function acceptAiNameSuggestion(ip) {
-            console.log('Accept clicked for IP:', ip);
-            
-            // 1. TAKOJ najdi AI predlog v trenutnem UI in ga shrani
-            let aiSuggestion = null;
-            
-            // Poiščimo AI suggestion element v trenutnem DOM
-            const deviceRows = document.querySelectorAll('.device-row, .device-card-container');
-            console.log('Found device rows:', deviceRows.length);
-            
-            deviceRows.forEach((row, index) => {
-                const searchData = row.getAttribute('data-search');
-                console.log(`Row ${index} data-search:`, searchData);
-                
-                if (searchData && searchData.includes(ip)) {
-                    console.log('Found matching row for IP:', ip);
-                    const aiElement = row.querySelector('.ai-name-suggestion .text-info');
-                    console.log('AI element found:', !!aiElement);
-                    
-                    if (aiElement) {
-                        const suggestionText = aiElement.textContent;
-                        console.log('Suggestion text:', suggestionText);
-                        
-                        // Oba formata: "Predlog: text" in "Predlog:text" 
-                        if (suggestionText.includes('Predlog:')) {
-                            aiSuggestion = suggestionText.replace('Predlog:', '').replace('Predlog:', '').trim();
-                            console.log('Extracted AI suggestion:', aiSuggestion);
-                        }
-                    }
-                }
-            });
-            
-            if (!aiSuggestion) {
-                console.error('AI suggestion not found in UI');
+            // 1. DIREKTNO najdi AI suggestion element po data-ip atributu
+            const aiElement = document.querySelector(`.ai-name-suggestion[data-ip="${ip}"]`);
+            if (!aiElement) {
+                console.error('AI suggestion element not found for IP:', ip);
                 return;
             }
             
-            // 2. TAKOJ posodobi ime v input polju
-            const nameInputs = document.querySelectorAll('.custom-name-input');
-            nameInputs.forEach(input => {
-                const row = input.closest('.device-row, .device-card-container');
-                if (row && row.getAttribute('data-search').includes(ip)) {
-                    input.value = aiSuggestion;
-                }
-            });
+            // 2. Preberi AI suggestion iz data-suggestion atributa
+            const aiSuggestion = aiElement.getAttribute('data-suggestion');
+            if (!aiSuggestion) {
+                console.error('AI suggestion data not found');
+                return;
+            }
             
-            // 3. V ozadju shrani ime + potrdi AI predlog
+            // 3. TAKOJ posodobi ime v input polju - najdi input znotraj AI elementa
+            const nameInput = aiElement.querySelector('.custom-name-input');
+            if (nameInput) {
+                nameInput.value = aiSuggestion;
+            }
+            
+            // 4. V ozadju shrani ime + potrdi AI predlog
             Promise.all([
                 // Shrani ime naprave
                 fetch('/api/update-device-name', {
