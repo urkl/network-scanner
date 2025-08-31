@@ -12,7 +12,7 @@ import requests
 import sqlite3
 import logging
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 import netifaces
 import socket
 import subprocess
@@ -1003,6 +1003,11 @@ def get_custom_name_from_db(ip):
 def index():
     """Glavna stran"""
     return render_template('index.html')
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    """Serve static files"""
+    return send_from_directory('static', filename)
 
 @app.route('/api/update-device-name', methods=['POST'])
 def api_update_device_name():

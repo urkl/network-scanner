@@ -94,10 +94,6 @@ logs/
 *.swp
 *.swo
 
-# Screenshots (optional - remove if you want to commit them)
-screenshots/*.png
-screenshots/*.jpg
-!screenshots/README.md
 
 # Temporary files
 *.tmp

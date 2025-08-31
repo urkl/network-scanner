@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="/static/translations.js"></script>
     <style>
         body {
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #3b82f6 100%);
@@ -1250,6 +1251,95 @@
                 body: JSON.stringify({ enabled: autoRefreshEnabled })
             }).catch(error => console.error('Error saving auto-refresh config:', error));
         }
+        
+        // Multi-language support - Apply translations on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get current language
+            const lang = getUserLanguage();
+            document.documentElement.lang = lang;
+            
+            // Translate main UI elements
+            function translateUI() {
+                // Header
+                const headerTitle = document.querySelector('.header h2');
+                if (headerTitle) headerTitle.textContent = t('title');
+                
+                const headerSubtitle = document.querySelector('.header p');
+                if (headerSubtitle) headerSubtitle.textContent = t('subtitle');
+                
+                // Statistics cards labels
+                const statsLabels = document.querySelectorAll('.stats-card small');
+                if (statsLabels[0]) statsLabels[0].textContent = t('totalDevices');
+                if (statsLabels[1]) statsLabels[1].textContent = t('onlineDevices');
+                if (statsLabels[2]) statsLabels[2].textContent = t('lastScan');
+                if (statsLabels[3]) statsLabels[3].textContent = t('cacheAge');
+                
+                // Search placeholder
+                const searchInput = document.getElementById('search-input');
+                if (searchInput) searchInput.placeholder = t('searchPlaceholder');
+                
+                // Network range placeholder
+                const networkInput = document.getElementById('network');
+                if (networkInput) networkInput.placeholder = t('networkRange');
+                
+                // Buttons
+                const quickScanBtn = document.querySelector('button[onclick*="quickScan"]');
+                if (quickScanBtn) quickScanBtn.innerHTML = `<i class="fas fa-search"></i> ${t('quickScan')}`;
+                
+                const fullScanBtn = document.querySelector('button[onclick*="fullScan"]');
+                if (fullScanBtn) fullScanBtn.innerHTML = `<i class="fas fa-network-wired"></i> ${t('fullScan')}`;
+                
+                const clearCacheBtn = document.querySelector('button[onclick*="clearCache"]');
+                if (clearCacheBtn) clearCacheBtn.innerHTML = `<i class="fas fa-trash"></i> ${t('clearCache')}`;
+                
+                // View buttons
+                const tableViewBtn = document.getElementById('table-view-btn');
+                if (tableViewBtn) tableViewBtn.innerHTML = `<i class="fas fa-table"></i> ${t('tableView')}`;
+                
+                const cardsViewBtn = document.getElementById('cards-view-btn');
+                if (cardsViewBtn) cardsViewBtn.innerHTML = `<i class="fas fa-th-large"></i> ${t('cardsView')}`;
+                
+                // Table headers (if in Slovenian, keep original)
+                if (lang === 'sl') {
+                    // Keep Slovenian headers as they are
+                } else {
+                    // Translate table headers to selected language
+                    const tableHeaders = document.querySelectorAll('#devices-table-container th');
+                    if (tableHeaders.length > 0) {
+                        tableHeaders[0].textContent = t('status');
+                        tableHeaders[1].textContent = t('ipAddress');
+                        tableHeaders[2].textContent = t('deviceName');
+                        tableHeaders[3].textContent = t('customName');
+                        tableHeaders[4].textContent = t('macAddress');
+                        tableHeaders[5].textContent = t('vendor');
+                        tableHeaders[6].textContent = t('os');
+                        tableHeaders[7].textContent = t('openPorts');
+                        tableHeaders[8].textContent = t('lastActive');
+                        tableHeaders[9].textContent = t('actions');
+                    }
+                }
+                
+                // Scanning overlay
+                const scanTitle = document.getElementById('scan-status-title');
+                if (scanTitle) scanTitle.textContent = t('scanningNetwork');
+                
+                const scanDetails = document.getElementById('scan-status-details');
+                if (scanDetails && scanDetails.textContent.includes('To lahko')) {
+                    scanDetails.textContent = t('scanProgress');
+                }
+            }
+            
+            // Apply translations
+            translateUI();
+            
+            // Override some functions to use translations
+            const originalUpdateResults = window.updateResults;
+            window.updateResults = function(data) {
+                originalUpdateResults(data);
+                // Re-translate dynamic content after update
+                setTimeout(translateUI, 100);
+            };
+        });
     </script>
 </body>
 </html>
