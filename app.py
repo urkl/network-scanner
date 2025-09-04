@@ -2279,8 +2279,10 @@ if __name__ == '__main__':
     scanner_thread.start()
     
     print("[*] Naprave se bodo prikazale v nekaj sekundah...")
-    print(f"[*] Odprite http://localhost:5000 v brskalniku")
+    port = int(os.getenv('PORT', 5001))  # Use port 5001 by default or PORT env var
+    print(f"[*] Odprite http://localhost:{port} v brskalniku")
     
     # Flask run nastavitve iz env vars
     debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-    app.run(host='0.0.0.0', port=5000, debug=debug)
+    port = int(os.getenv('PORT', 5001))  # Use port 5001 by default or PORT env var
+    app.run(host='0.0.0.0', port=port, debug=debug)
