@@ -227,6 +227,16 @@ def scan_network_background(network_range, force_full_scan=False):
         if 'custom_names' in locals():
             restore_custom_names(custom_names)
         
+        # Počisti podvojene MAC naslove po skeniranju
+        if not was_interrupted and scan_results:
+            try:
+                dedup_count = deduplicate_mac_addresses()
+                clean_count = clean_empty_mac_addresses()
+                if dedup_count > 0 or clean_count > 0:
+                    print(f"[*] Počiščenih {dedup_count} podvojenih in {clean_count} neveljavnih MAC naslovov")
+            except Exception as e:
+                print(f"[!] Napaka pri čiščenju MAC naslovov: {e}")
+        
         # Nastavi končni status
         last_scan_time = datetime.now().isoformat()
         current_scan_status['progress'] = 100 if not was_interrupted else 0
@@ -909,7 +919,7 @@ def extract_host_info(nm, host):
     mac = ''
     vendor = ''
     if 'mac' in host_data['addresses']:
-        mac = host_data['addresses']['mac']
+        mac = normalize_mac_address(host_data['addresses']['mac'])
         # Uporabi naš izboljšan vendor lookup
         vendor = get_vendor_info(mac)
         # Fallback na nmap vendor če naš ne najde ničesar
@@ -1005,6 +1015,156 @@ def get_custom_name_from_db(ip):
     result = c.fetchone()
     conn.close()
     return result[0] if result and result[0] else ''
+
+def deduplicate_mac_addresses():
+    """Odstrani podvojene MAC naslove - obdrži najnovejši vnos"""
+    global scan_results
+    
+    # Ustvari mapo MAC -> zadnja naprava
+    mac_to_device = {}
+    devices_to_keep = []
+    
+    for device in scan_results:
+        mac = device.get('mac', '').strip().upper()
+        
+        # Preskoči naprave brez MAC naslova
+        if not mac or mac == '' or mac == '00:00:00:00:00:00':
+            devices_to_keep.append(device)
+            continue
+        
+        # Preveri ali že imamo napravo s tem MAC naslovom
+        if mac in mac_to_device:
+            existing_device = mac_to_device[mac]
+            current_device = device
+            
+            # Določi katera naprava je novejša
+            existing_time = existing_device.get('last_seen', existing_device.get('scan_time', '1970-01-01'))
+            current_time = current_device.get('last_seen', current_device.get('scan_time', '1970-01-01'))
+            
+            try:
+                existing_dt = datetime.fromisoformat(existing_time.replace('Z', '+00:00'))
+                current_dt = datetime.fromisoformat(current_time.replace('Z', '+00:00'))
+                
+                # Obdrži novejšo napravo
+                if current_dt > existing_dt:
+                    # Zamenjaj staro napravo z novo
+                    for i, dev in enumerate(devices_to_keep):
+                        if dev == existing_device:
+                            devices_to_keep[i] = current_device
+                            break
+                    mac_to_device[mac] = current_device
+                    logger.info(f"MAC {mac}: zamenjan {existing_device['ip']} z {current_device['ip']} (novejši)")
+                else:
+                    # Obdrži obstoječo napravo, zavrzi trenutno
+                    logger.info(f"MAC {mac}: obdržan {existing_device['ip']}, zavržen {current_device['ip']} (starejši)")
+            except (ValueError, AttributeError):
+                # Če ni možno parsati datuma, primerjaj IP naslove (obdrži nižji IP)
+                try:
+                    existing_ip_num = sum(int(part) << (8 * (3 - i)) for i, part in enumerate(existing_device['ip'].split('.')))
+                    current_ip_num = sum(int(part) << (8 * (3 - i)) for i, part in enumerate(current_device['ip'].split('.')))
+                    
+                    if current_ip_num < existing_ip_num:
+                        # Zamenjaj z napravo z nižjim IP
+                        for i, dev in enumerate(devices_to_keep):
+                            if dev == existing_device:
+                                devices_to_keep[i] = current_device
+                                break
+                        mac_to_device[mac] = current_device
+                        logger.info(f"MAC {mac}: zamenjan {existing_device['ip']} z {current_device['ip']} (nižji IP)")
+                    else:
+                        logger.info(f"MAC {mac}: obdržan {existing_device['ip']}, zavržen {current_device['ip']} (višji IP)")
+                except:
+                    # Zadnja možnost - obdrži obstoječo napravo
+                    logger.warning(f"Ne morem primerjati naprav za MAC {mac}, obdržim obstoječo")
+                    pass
+        else:
+            # Prvi vnos za ta MAC naslov
+            mac_to_device[mac] = device
+            devices_to_keep.append(device)
+    
+    # Posodobi seznam naprav
+    removed_count = len(scan_results) - len(devices_to_keep)
+    if removed_count > 0:
+        scan_results = devices_to_keep
+        logger.info(f"Odstranjenih {removed_count} podvojenih MAC naslovov")
+        save_cache()
+        return removed_count
+    
+    return 0
+
+def clean_empty_mac_addresses():
+    """Počisti naprave z praznimi ali neveljavnimi MAC naslovi"""
+    global scan_results
+    
+    devices_to_keep = []
+    removed_devices = []
+    
+    for device in scan_results:
+        mac = device.get('mac', '').strip()
+        
+        # Preveri ali je MAC naslov prazen ali neveljaven
+        should_remove = (
+            not mac or 
+            mac == '' or 
+            mac == '00:00:00:00:00:00' or
+            mac.lower() == 'unknown' or
+            len(mac.replace(':', '').replace('-', '')) != 12
+        )
+        
+        # Dodatno preverjanje - če naprava nima MAC naslova in je bila zadnjič videna pred več kot 24 urami
+        if should_remove and device.get('last_seen'):
+            try:
+                last_seen = datetime.fromisoformat(device['last_seen'].replace('Z', '+00:00'))
+                hours_since_seen = (datetime.now() - last_seen).total_seconds() / 3600
+                
+                # Obdrži naprave brez MAC naslova če so bile nedavno aktivne (manj kot 24 ur)
+                if hours_since_seen < 24:
+                    should_remove = False
+                    logger.info(f"Obdržana naprava brez MAC {device['ip']} - nedavno aktivna ({hours_since_seen:.1f}h)")
+            except:
+                pass
+        
+        if should_remove:
+            removed_devices.append(device)
+            logger.info(f"Odstranjena naprava z neveljavnim MAC: {device['ip']} (MAC: '{mac}')")
+        else:
+            devices_to_keep.append(device)
+    
+    # Posodobi seznam naprav
+    removed_count = len(removed_devices)
+    if removed_count > 0:
+        scan_results = devices_to_keep
+        logger.info(f"Odstranjenih {removed_count} naprav z neveljavnimi MAC naslovi")
+        save_cache()
+        
+        # Odstrani tudi iz baze
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        for device in removed_devices:
+            c.execute('DELETE FROM devices WHERE ip = ?', (device['ip'],))
+            c.execute('DELETE FROM port_history WHERE device_ip = ?', (device['ip'],))
+        conn.commit()
+        conn.close()
+        
+        return removed_count
+    
+    return 0
+
+def normalize_mac_address(mac):
+    """Normaliziraj MAC naslov v standardno obliko XX:XX:XX:XX:XX:XX"""
+    if not mac:
+        return ''
+    
+    # Odstrani vse ločevalnike in pretvori v velike črke
+    clean_mac = mac.replace(':', '').replace('-', '').replace(' ', '').upper()
+    
+    # Preveri ali je veljavna dolžina
+    if len(clean_mac) != 12:
+        return mac  # Vrni originalni če ni veljavna dolžina
+    
+    # Dodaj dvojpičke
+    normalized = ':'.join(clean_mac[i:i+2] for i in range(0, 12, 2))
+    return normalized
 
 @app.route('/')
 def index():
@@ -1343,6 +1503,88 @@ def api_clear_all():
         logger.error(f"Error in clear all: {e}")
         return jsonify({'status': 'error', 'message': f'Napaka: {str(e)}'})
 
+@app.route('/api/deduplicate-mac', methods=['POST'])
+def api_deduplicate_mac():
+    """Odstrani podvojene MAC naslove"""
+    try:
+        removed_count = deduplicate_mac_addresses()
+        if removed_count > 0:
+            return jsonify({
+                'status': 'success', 
+                'message': f'Odstranjenih {removed_count} podvojenih MAC naslovov',
+                'removed_count': removed_count
+            })
+        else:
+            return jsonify({
+                'status': 'info', 
+                'message': 'Ni najdenih podvojenih MAC naslovov',
+                'removed_count': 0
+            })
+    except Exception as e:
+        logger.error(f"Error in MAC deduplication: {e}")
+        return jsonify({'status': 'error', 'message': f'Napaka: {str(e)}'})
+
+@app.route('/api/clean-empty-mac', methods=['POST'])
+def api_clean_empty_mac():
+    """Počisti naprave z praznimi MAC naslovi"""
+    try:
+        removed_count = clean_empty_mac_addresses()
+        if removed_count > 0:
+            return jsonify({
+                'status': 'success', 
+                'message': f'Odstranjenih {removed_count} naprav z neveljavnimi MAC naslovi',
+                'removed_count': removed_count
+            })
+        else:
+            return jsonify({
+                'status': 'info', 
+                'message': 'Ni najdenih naprav z neveljavnimi MAC naslovi',
+                'removed_count': 0
+            })
+    except Exception as e:
+        logger.error(f"Error in empty MAC cleanup: {e}")
+        return jsonify({'status': 'error', 'message': f'Napaka: {str(e)}'})
+
+@app.route('/api/cleanup-mac', methods=['POST'])
+def api_cleanup_mac():
+    """Izvede celotno čiščenje MAC naslovov - deduplikacija + čiščenje praznih"""
+    try:
+        # Najprej odstrani podvojene MAC naslove
+        dedup_count = deduplicate_mac_addresses()
+        
+        # Nato počisti prazne MAC naslove
+        clean_count = clean_empty_mac_addresses()
+        
+        total_removed = dedup_count + clean_count
+        
+        if total_removed > 0:
+            message_parts = []
+            if dedup_count > 0:
+                message_parts.append(f'{dedup_count} podvojenih')
+            if clean_count > 0:
+                message_parts.append(f'{clean_count} neveljavnih')
+            
+            message = f"Odstranjenih {' in '.join(message_parts)} MAC naslovov (skupaj {total_removed})"
+            
+            return jsonify({
+                'status': 'success', 
+                'message': message,
+                'deduplicated_count': dedup_count,
+                'cleaned_count': clean_count,
+                'total_removed': total_removed
+            })
+        else:
+            return jsonify({
+                'status': 'info', 
+                'message': 'Ni najdenih problemov z MAC naslovi',
+                'deduplicated_count': 0,
+                'cleaned_count': 0,
+                'total_removed': 0
+            })
+    except Exception as e:
+        logger.error(f"Error in MAC cleanup: {e}")
+        return jsonify({'status': 'error', 'message': f'Napaka: {str(e)}'})
+
 @app.route('/api/results')
 def api_results():
     """Vrne trenutne rezultate skeniranja"""
@@ -1547,7 +1789,8 @@ def continuous_background_scanner():
                 for host in new_hosts:
                     # Takoj dodaj osnovne informacije za prikaz
                     # Poskusi dobiti MAC iz ARP tabele
-                    mac = get_mac_from_arp(host)
+                    raw_mac = get_mac_from_arp(host)
+                    mac = normalize_mac_address(raw_mac) if raw_mac else ''
                     vendor = get_vendor_info(mac) if mac else ''
                     
                     basic_info = {
@@ -1674,14 +1917,15 @@ def detailed_device_scan(host):
                     mac = ''
                     vendor = ''
                     if 'mac' in host_data['addresses']:
-                        mac = host_data['addresses']['mac']
+                        mac = normalize_mac_address(host_data['addresses']['mac'])
                         vendor = get_vendor_info(mac)
                         if vendor == 'Neznano' and mac in host_data['vendor']:
                             vendor = host_data['vendor'][mac]
                     else:
                         # Poskusi dobiti MAC iz sistemske ARP tabele
-                        mac = get_mac_from_arp(host)
-                        if mac:
+                        raw_mac = get_mac_from_arp(host)
+                        if raw_mac:
+                            mac = normalize_mac_address(raw_mac)
                             vendor = get_vendor_info(mac)
                     
                     # OS detekcija

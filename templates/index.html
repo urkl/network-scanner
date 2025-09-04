@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Scanner</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="/static/translations.js"></script>
@@ -121,6 +122,21 @@
             text-transform: uppercase;
             font-size: 0.85em;
             letter-spacing: 0.5px;
+        }
+        .table thead th.sortable {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+        .table thead th.sortable:hover {
+            background: linear-gradient(135deg, #2a5298 0%, #3b82f6 50%, #60a5fa 100%);
+        }
+        .table thead th.sortable i {
+            margin-left: 5px;
+            opacity: 0.6;
+        }
+        .table thead th.sortable:hover i {
+            opacity: 1;
         }
         .table {
             border-radius: 15px;
@@ -381,6 +397,22 @@
                 <button class="btn btn-outline-success" onclick="autoRefresh()" id="auto-refresh-btn">
                     <i class="fas fa-sync-alt"></i> Samo-osveži: OFF
                 </button>
+                <div class="btn-group ms-2">
+                    <button class="btn btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-broom"></i> Čiščenje MAC
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="cleanupMacAddresses()">
+                            <i class="fas fa-magic"></i> Avtomatsko čiščenje
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="deduplicateMacAddresses()">
+                            <i class="fas fa-clone"></i> Odstrani podvojene
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="cleanEmptyMacAddresses()">
+                            <i class="fas fa-trash"></i> Počisti prazne
+                        </a></li>
+                    </ul>
+                </div>
             </div>
 
             <!-- Devices Table View -->
@@ -389,15 +421,33 @@
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Status</th>
-                                <th>IP Naslov</th>
-                                <th>Ime naprave</th>
-                                <th>Moje ime</th>
-                                <th>MAC naslov</th>
-                                <th>Proizvajalec</th>
-                                <th>OS</th>
-                                <th>Odprte vrata</th>
-                                <th>Zadnje aktivno</th>
+                                <th class="sortable" onclick="sortTable(0)" title="Klikni za sortiranje">
+                                    Status <i class="fas fa-sort" id="sort-icon-0"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(1)" title="Klikni za sortiranje">
+                                    IP Naslov <i class="fas fa-sort" id="sort-icon-1"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(2)" title="Klikni za sortiranje">
+                                    Ime naprave <i class="fas fa-sort" id="sort-icon-2"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(3)" title="Klikni za sortiranje">
+                                    Moje ime <i class="fas fa-sort" id="sort-icon-3"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(4)" title="Klikni za sortiranje">
+                                    MAC naslov <i class="fas fa-sort" id="sort-icon-4"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(5)" title="Klikni za sortiranje">
+                                    Proizvajalec <i class="fas fa-sort" id="sort-icon-5"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(6)" title="Klikni za sortiranje">
+                                    OS <i class="fas fa-sort" id="sort-icon-6"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(7)" title="Klikni za sortiranje">
+                                    Odprte vrata <i class="fas fa-sort" id="sort-icon-7"></i>
+                                </th>
+                                <th class="sortable" onclick="sortTable(8)" title="Klikni za sortiranje">
+                                    Zadnje aktivno <i class="fas fa-sort" id="sort-icon-8"></i>
+                                </th>
                                 <th>Akcije</th>
                             </tr>
                         </thead>
@@ -1340,6 +1390,147 @@
                 setTimeout(translateUI, 100);
             };
         });
+
+        // Global variables for table sorting
+        let currentSortColumn = -1;
+        let sortDirection = 'asc';
+
+        // Table sorting functionality
+        function sortTable(columnIndex) {
+            const table = document.querySelector('.table tbody');
+            const rows = Array.from(table.querySelectorAll('tr:not(.no-data)'));
+            
+            if (rows.length === 0) return;
+
+            // Toggle sort direction if clicking same column
+            if (currentSortColumn === columnIndex) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortDirection = 'asc';
+                currentSortColumn = columnIndex;
+            }
+
+            // Clear all sort icons
+            for (let i = 0; i <= 8; i++) {
+                const icon = document.getElementById('sort-icon-' + i);
+                if (icon) {
+                    icon.className = 'fas fa-sort';
+                }
+            }
+
+            // Set current sort icon
+            const currentIcon = document.getElementById('sort-icon-' + columnIndex);
+            if (currentIcon) {
+                currentIcon.className = sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            }
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal = getCellValue(a, columnIndex);
+                let bVal = getCellValue(b, columnIndex);
+
+                // Handle special column types
+                if (columnIndex === 0) { // Status - online first
+                    aVal = aVal.includes('online') ? 1 : 0;
+                    bVal = bVal.includes('online') ? 1 : 0;
+                } else if (columnIndex === 1) { // IP Address - numeric sort
+                    aVal = ipToNumber(aVal);
+                    bVal = ipToNumber(bVal);
+                } else if (columnIndex === 8) { // Last seen - date sort
+                    aVal = new Date(aVal || '1970-01-01');
+                    bVal = new Date(bVal || '1970-01-01');
+                } else {
+                    // String comparison
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+
+                if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            // Re-append sorted rows
+            rows.forEach(row => table.appendChild(row));
+        }
+
+        function getCellValue(row, columnIndex) {
+            const cell = row.children[columnIndex];
+            if (!cell) return '';
+            
+            // For input fields, get the value
+            const input = cell.querySelector('input');
+            if (input) return input.value || input.placeholder || '';
+            
+            // For regular text, strip HTML
+            return cell.textContent || cell.innerText || '';
+        }
+
+        function ipToNumber(ip) {
+            // Convert IP address to number for proper sorting (e.g., 192.168.1.10 < 192.168.1.100)
+            const parts = ip.trim().split('.');
+            if (parts.length !== 4) return 0;
+            
+            try {
+                return parts.reduce((acc, part, i) => {
+                    return acc + (parseInt(part) << (8 * (3 - i)));
+                }, 0);
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        // MAC address cleanup functions
+        function cleanupMacAddresses() {
+            if (confirm('Želite počistiti podvojene in neveljavne MAC naslove? To bo odstranilo naprave z enakimi MAC naslovi in obdržalo najnovejše.')) {
+                fetch('/api/cleanup-mac', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.status === 'success') {
+                            loadResults();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Napaka pri čiščenju MAC naslovov');
+                    });
+            }
+        }
+
+        function deduplicateMacAddresses() {
+            if (confirm('Želite odstraniti podvojene MAC naslove? Obdržane bodo najnovejše naprave.')) {
+                fetch('/api/deduplicate-mac', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.status === 'success') {
+                            loadResults();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Napaka pri odstranjevanju podvojenih MAC naslovov');
+                    });
+            }
+        }
+
+        function cleanEmptyMacAddresses() {
+            if (confirm('Želite počistiti naprave z neveljavnimi MAC naslovi? Odstranjene bodo naprave brez MAC naslova ali z neveljavnimi MAC naslovi.')) {
+                fetch('/api/clean-empty-mac', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.status === 'success') {
+                            loadResults();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Napaka pri čiščenju neveljavnih MAC naslovov');
+                    });
+            }
+        }
     </script>
 </body>
 </html>

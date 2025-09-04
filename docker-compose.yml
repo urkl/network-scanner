@@ -31,10 +31,10 @@ services:
       - SECRET_KEY=${SECRET_KEY:-changeme_in_production}
       
     volumes:
-      # Persistent storage for device data and cache
-      - ./data:/app/data:rw
+      # Persistent storage for database and cache files  
+      - ./network_scanner.db:/app/network_scanner.db:rw
+      - ./devices.json:/app/devices.json:rw
       - ./config.json:/app/config.json:rw
-      - ./cache:/app/cache:rw
       
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/results"]
